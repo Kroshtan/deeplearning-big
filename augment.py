@@ -3,25 +3,29 @@ import cv2
 from os import listdir
 from os.path import isfile, isdir, join, abspath
 
-PATH = abspath("../ROBIN")
-OUTPATH = abspath("../")
+ROBINPATH 	= abspath("../ROBIN")
+COMPLEXPATH = abspath("../Dataset_complex")
+OUTPATH 	= abspath("../")
 
 #DONE 	load in images
 #		aug to 8 different images (rotate, vertical mirror and rotate)
 #		save images to numpy array? npz?
 
-def loadAllFiles():
-    files =  [join(PATH, f) for f in listdir(PATH) if isfile(join(PATH, f))]
-    folders = [join(PATH, f) for f in listdir(PATH) if isdir(join(PATH, f))]
+def loadAllFiles(path):
+    files =  [join(path, f) for f in listdir(path) if isfile(join(path, f))]
+    folders = [join(path, f) for f in listdir(path) if isdir(join(path, f))]
     for folder in folders:
     	temp =  [join(folder, f) for f in listdir(folder) if isfile(join(folder, f))]
     	for f in temp:
     		files.append(f) #slow and ugly, fix later
 
-    print("found %d files:" % (len(files)))
+    print("found %d files on %s" % (len(files), str(path)))
     return files
 
-def augment_images(images):
+def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=False):
+	'''
+	Flip should be set to false for the advanced dataset
+	'''
 	final_images = []
 	saveidx = 0
 	for idx, imgpath in enumerate(images):
@@ -39,26 +43,45 @@ def augment_images(images):
 			final_images.append(img)
 
 		#mirror and rotate
-		original_img = np.flip(original_img, 0);
-		final_images.append(original_img)
-		for rot in range(90, 360, 90):
-			rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
-			img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
-			final_images.append(img)
+		if flip:
+			original_img = np.flip(original_img, 0);
+			final_images.append(original_img)
+			for rot in range(90, 360, 90):
+				rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
+				img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
+				final_images.append(img)
 
-		if idx % 100 == 0:
-			np.save(join(OUTPATH, 'augmented_data_%d' % (saveidx)), final_images)
+		#save images to numpy array
+		if idx % saveiter == 0 and not saveaspng:
+			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
 			# print("saved 100 images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
 			saveidx += 1
 			final_images = []
 
-	np.save(join(OUTPATH, 'augmented_data_%d' % (saveidx)), final_images)
+		#save all images individually
+		if saveaspng:
+			for img in final_images:
+				cv2.imwrite('filename_%d.png' % (saveidx), img)
+				saveidx += 1
+			final_images = []
+
+
+
+
+	np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
 	# print("saved final images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
 	# print("finished augmenting images")
 	print("augmented and saved all files")
 
 
 if __name__ == '__main__':
-	files = loadAllFiles()
-	augment_images(files)	
+
+
+	# files = loadAllFiles(ROBINPATH)
+	# augment_images(files, 'robin_data')
+
+	files = loadAllFiles(COMPLEXPATH)
+	augment_images(files, 'complex_data', False, 50)
+	
+
 	print("FINIHED")
