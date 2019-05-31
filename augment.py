@@ -7,9 +7,6 @@ ROBINPATH 	= abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH 	= abspath("../")
 
-#DONE 	load in images
-#		aug to 8 different images (rotate, vertical mirror and rotate)
-#		save images to numpy array? npz?
 
 def loadAllFiles(path):
     files =  [join(path, f) for f in listdir(path) if isfile(join(path, f))]
@@ -25,6 +22,7 @@ def loadAllFiles(path):
 def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=False):
 	'''
 	Flip should be set to false for the advanced dataset
+	saveiter is the iteration at which the images get saved (and the ram freed)
 	'''
 	final_images = []
 	saveidx = 0
@@ -54,7 +52,6 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 		#save images to numpy array
 		if idx % saveiter == 0 and not saveaspng:
 			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
-			# print("saved 100 images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
 			saveidx += 1
 			final_images = []
 
@@ -69,19 +66,14 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 
 
 	np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
-	# print("saved final images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
-	# print("finished augmenting images")
 	print("augmented and saved all files")
 
 
 if __name__ == '__main__':
-
-
-	# files = loadAllFiles(ROBINPATH)
-	# augment_images(files, 'robin_data')
+	files = loadAllFiles(ROBINPATH)
+	augment_images(files, 'robin_data')
 
 	files = loadAllFiles(COMPLEXPATH)
-	augment_images(files, 'complex_data', False, 50)
-	
+	augment_images(files, 'complex_data', False, 50) #the complex images are bigger, and should be saved less frequently for RAM
 
 	print("FINIHED")
