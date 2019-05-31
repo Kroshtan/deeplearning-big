@@ -9,18 +9,15 @@ from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.preprocessing.image import load_img, img_to_array, array_to_img
 from keras.callbacks import TensorBoard
-import glob
 from PIL import Image
 import PIL.ImageOps
 import matplotlib.pyplot as plt
 import os
 import shutil
-
 import glob, os
 from PIL import Image
 import PIL.ImageOps
 import matplotlib.pyplot as plt
-
 import sys
 import numpy as np
 
@@ -28,6 +25,13 @@ PREPARE_COLAB_DATA = False
 RUN_ON_COLAB = False
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
+TRAIN_ON_AUGMENTED = False
+AUGMENTED_FILES = ['../augmented_data_0.npy', '../augmented_data_1.npy', '../augmented_data_2.npy',
+ '../augmented_data_3.npy', '../augmented_data_4.npy', '../augmented_data_5.npy', '../augmented_data_6.npy', ]
+
+ EPOCHS = 30000
+ BATCH_SIZE = 16
+ SAMPLE_INTERVAL = 20
 
 class GAN():
     def __init__(self):
@@ -38,6 +42,11 @@ class GAN():
         optimizer = Adam(0.0001, 0.5)
 
         self.logdir = "./logs"
+        try: 
+          os.mkdir(self.logdir)
+          print('Created log directory...')
+        except:
+          print('Log directory already exists!')
 
         # Empty any old log directory
         for the_file in os.listdir(self.logdir):
@@ -69,9 +78,10 @@ class GAN():
                 print("Created output images directory...")
             except:
                 print("Output images directory already exists!")
-
-            self.channels = 1
-            self.X_train = np.load(NPY_SAVEFILE)
+            if TRAIN_ON_AUGMENTED:
+                self.X_train = np.load(AUGMENTED_FILES[0])
+            else:
+                self.X_train = np.load(NPY_SAVEFILE)
             print(self.X_train.shape)
             target_size = (max([x.shape[1] for x in self.X_train]), max([x.shape[0] for x in self.X_train]))
             self.img_shape = (target_size[1], target_size[0], self.channels)
@@ -200,62 +210,63 @@ class GAN():
         tensorboard = TensorBoard(log_dir=self.logdir)
         tensorboard.set_model(self.discriminator)
 
-        for epoch in range(epochs):
+        for idx in range(0, len(AUGMENTED_FILES)):
+            for epoch in range(epochs):
 
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
+                # ---------------------
+                #  Train Discriminator
+                # ---------------------
 
-            # Select a random batch of images
-            idx = np.random.randint(0, self.X_train.shape[0], batch_size)
-            imgs = self.X_train[idx]
+                # Select a random batch of images
+                idx = np.random.randint(0, self.X_train.shape[0], batch_size)
+                imgs = self.X_train[idx]
 
-            noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
+                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
-            # Generate a batch of new images
-            gen_imgs = self.generator.predict(noise)
+                # Generate a batch of new images
+                gen_imgs = self.generator.predict(noise)
 
-            if epoch == 0 or accuracy < 80:
-                # Train the discriminator
-                d_loss_real = self.discriminator.train_on_batch(imgs, valid)
-                d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-            else:
-                # Test the discriminator
-                d_loss_real = self.discriminator.test_on_batch(imgs, valid)
-                d_loss_fake = self.discriminator.test_on_batch(gen_imgs, fake)
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                if epoch == 0 or accuracy < 80:
+                    # Train the discriminator
+                    d_loss_real = self.discriminator.train_on_batch(imgs, valid)
+                    d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
+                    d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                else:
+                    # Test the discriminator
+                    d_loss_real = self.discriminator.test_on_batch(imgs, valid)
+                    d_loss_fake = self.discriminator.test_on_batch(gen_imgs, fake)
+                    d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-            accuracy = 100*d_loss[1]
+                accuracy = 100*d_loss[1]
 
-            # ---------------------
-            #  Train Generator
-            # ---------------------
+                # ---------------------
+                #  Train Generator
+                # ---------------------
 
-            noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
+                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
-            if epoch == 0 or accuracy > 20:
-                # Train the generator (to have the discriminator label samples as valid)
-                g_loss = self.combined.train_on_batch(noise, valid)
-            else:
-                # Train the generator (to have the discriminator label samples as valid)
-                g_loss = self.combined.test_on_batch(noise, valid)
+                if epoch == 0 or accuracy > 20:
+                    # Train the generator (to have the discriminator label samples as valid)
+                    g_loss = self.combined.train_on_batch(noise, valid)
+                else:
+                    # Train the generator (to have the discriminator label samples as valid)
+                    g_loss = self.combined.test_on_batch(noise, valid)
 
-            tensorboard.on_epoch_end(epoch, {'generator loss': g_loss, 'discriminator loss': d_loss[0], 'Accuracy': accuracy})
+                tensorboard.on_epoch_end(epoch, {'generator loss': g_loss, 'discriminator loss': d_loss[0], 'Accuracy': accuracy})
 
-            # Plot the progress
-            if RUN_ON_COLAB:
-                if (epoch % 200) == 0:
+                # Plot the progress
+                if RUN_ON_COLAB:
+                    if (epoch % 200) == 0:
+                        print(f"{epoch} [D loss: {d_loss[0]}, " +
+                      f"acc.: {accuracy}%] [G loss: {g_loss}]")
+                else:
                     print(f"{epoch} [D loss: {d_loss[0]}, " +
-                  f"acc.: {accuracy}%] [G loss: {g_loss}]")
-            else:
-                print(f"{epoch} [D loss: {d_loss[0]}, " +
-                  f"acc.: {accuracy}%] [G loss: {g_loss}]")
+                      f"acc.: {accuracy}%] [G loss: {g_loss}]")
 
-            # If at save interval => save generated image samples
-            if epoch % sample_interval == 0:
-                self.sample_images(epoch)
-
+                # If at save interval => save generated image samples
+                if epoch % sample_interval == 0:
+                    self.sample_images(epoch)
+            self.X_train = np.load(AUGMENTED_FILES[idx])
         tensorboard.on_train_end()
 
     def sample_images(self, epoch):
@@ -279,4 +290,4 @@ class GAN():
 
 if __name__ == '__main__':
     gan = GAN()
-    gan.train(epochs=30000, batch_size=16, sample_interval=20)
+    gan.train(epochs=EPOCHS, batch_size=BATCH_SIZE, sample_interval=SAMPLE_INTERVAL)
