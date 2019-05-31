@@ -1,5 +1,5 @@
+#@title  { form-width: "250px" }
 from __future__ import print_function, division
-
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Conv2D
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
@@ -16,9 +16,18 @@ import matplotlib.pyplot as plt
 import os
 import shutil
 
-import sys
+import glob, os
+from PIL import Image
+import PIL.ImageOps
+import matplotlib.pyplot as plt
 
+import sys
 import numpy as np
+
+PREPARE_COLAB_DATA = False
+RUN_ON_COLAB = False
+NPY_SAVEFILE = 'traindata.npy'
+IMAGE_DIR = 'images/'
 
 class GAN():
     def __init__(self):
@@ -54,37 +63,56 @@ class GAN():
         # Load the dataset
         filelist = glob.glob("./source_imgs/*.jpg")
         imgs = [Image.open(fname) for fname in filelist]
+        if RUN_ON_COLAB:
+            try:
+                os.mkdir(IMAGE_DIR)
+                print("Created output images directory...")
+            except:
+                print("Output images directory already exists!")
 
+            self.channels = 1
+            self.X_train = np.load(NPY_SAVEFILE)
+            print(self.X_train.shape)
+            target_size = (max([x.shape[1] for x in self.X_train]), max([x.shape[0] for x in self.X_train]))
+            self.img_shape = (target_size[1], target_size[0], self.channels)
+        else:
+            # Load the dataset
+            filelist = glob.glob("./source_imgs/*.jpg")
+            imgs = [Image.open(fname) for fname in filelist]
 
-        self.target_size  = (max([x.size[0] for x in imgs]),
-                             max([x.size[1] for x in imgs]))
+            self.target_size  = (max([x.size[0] for x in imgs]),
+                                 max([x.size[1] for x in imgs]))
 
-        self.target_size = tuple([x//rescale_factor for x in self.target_size])
+            self.target_size = tuple([x//rescale_factor for x in self.target_size])
 
-        self.X_train = []
+            self.X_train = []
 
-        for img in imgs:
-            old_size = img.size
-            ratio = min(self.target_size[0]/old_size[0],
-                        self.target_size[1]/old_size[1])
+            for img in imgs:
+                old_size = img.size
+                ratio = min(self.target_size[0]/old_size[0],
+                            self.target_size[1]/old_size[1])
 
-            new_size = tuple([int(x*ratio) for x in old_size])
-            img = img.resize(new_size, Image.ANTIALIAS)
-            img = PIL.ImageOps.invert(img)
-            new_img = Image.new("L", self.target_size)
-            new_img.paste(img, ((self.target_size[0]-new_size[0])//2,
-                                (self.target_size[1]-new_size[1])//2))
-            self.X_train.append(new_img)
+                new_size = tuple([int(x*ratio) for x in old_size])
+                img = img.resize(new_size, Image.ANTIALIAS)
+                img = PIL.ImageOps.invert(img)
+                new_img = Image.new("L", self.target_size)
+                new_img.paste(img, ((self.target_size[0]-new_size[0])//2,
+                                    (self.target_size[1]-new_size[1])//2))
+                self.X_train.append(new_img)
 
-        self.X_train = np.stack(self.X_train)
+            self.X_train = np.stack(self.X_train)
 
-        self.img_shape = (self.target_size[1],
-                          self.target_size[0],
-                          self.channels)
+            self.img_shape = (self.target_size[1],
+                              self.target_size[0],
+                              self.channels)
 
-        # Rescale -1 to 1
-        self.X_train = self.X_train / 127.5 - 1.
-        self.X_train = np.expand_dims(self.X_train, axis=3)
+            # Rescale -1 to 1
+            self.X_train = self.X_train / 127.5 - 1.
+            self.X_train = np.expand_dims(self.X_train, axis=3)
+
+        if PREPARE_COLAB_DATA:
+            np.save(NPY_SAVEFILE, self.X_train)
+            #quit()
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
@@ -216,7 +244,12 @@ class GAN():
             tensorboard.on_epoch_end(epoch, {'generator loss': g_loss, 'discriminator loss': d_loss[0], 'Accuracy': accuracy})
 
             # Plot the progress
-            print(f"{epoch} [D loss: {d_loss[0]}, " +
+            if RUN_ON_COLAB:
+                if (epoch % 200) == 0:
+                    print(f"{epoch} [D loss: {d_loss[0]}, " +
+                  f"acc.: {accuracy}%] [G loss: {g_loss}]")
+            else:
+                print(f"{epoch} [D loss: {d_loss[0]}, " +
                   f"acc.: {accuracy}%] [G loss: {g_loss}]")
 
             # If at save interval => save generated image samples
@@ -240,7 +273,7 @@ class GAN():
                 axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("images/%d.png" % epoch)
+        fig.savefig(IMAGE_DIR+"%d.png" % epoch)
         plt.close()
 
 
