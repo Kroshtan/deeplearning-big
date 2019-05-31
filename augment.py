@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
-from os import listdir, walk, system
-from os.path import isfile, isdir, join, abspath, dirname
+from os import listdir
+from os.path import isfile, isdir, join, abspath
 
 PATH = abspath("../ROBIN")
 OUTPATH = abspath("../")
@@ -23,6 +23,7 @@ def loadAllFiles():
 
 def augment_images(images):
 	final_images = []
+	saveidx = 0
 	for idx, imgpath in enumerate(images):
 		original_img = cv2.imread(imgpath)
 		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
@@ -45,17 +46,19 @@ def augment_images(images):
 			img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
 			final_images.append(img)
 
-	print("finished augmenting images")
-	return final_images
+		if idx % 100 == 0:
+			np.save(join(OUTPATH, 'augmented_data_%d' % (saveidx)), final_images)
+			# print("saved 100 images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
+			saveidx += 1
+			final_images = []
+
+	np.save(join(OUTPATH, 'augmented_data_%d' % (saveidx)), final_images)
+	# print("saved final images to ", join(OUTPATH, 'augmented_data_%d' % (saveidx)))
+	# print("finished augmenting images")
+	print("augmented and saved all files")
 
 
 if __name__ == '__main__':
 	files = loadAllFiles()
-	images = augment_images(files)	
-	# for idx, im in enumerate(images):
-	# 	cv2.imshow("img %d" % idx, im)
-	# 	cv2.waitKey(0)
-	# 	print(np.shape(im))
-
-	np.savez_compressed(join(OUTPATH, 'augmented_data'), images)
-	print("saved images to ", join(OUTPATH, 'augmented_data'))
+	augment_images(files)	
+	print("FINIHED")
