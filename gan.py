@@ -194,12 +194,12 @@ class GAN():
         model = Sequential()
 
 
-        model.add(Conv2D(16, (5, 5),
+        model.add(Conv2D(16, (8, 8),
                          activation='relu',
                          padding='same',
                          input_shape=self.img_shape))
 
-        model.add(Conv2D(8, (7, 7),
+        model.add(Conv2D(8, (16, 16),
                          activation='relu',
                          padding='same'))
 
@@ -257,7 +257,6 @@ class GAN():
                 # ---------------------
                 #  Train Generator
                 # ---------------------
-
                 noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
                 if epoch == 0 or accuracy > 20:
@@ -275,8 +274,8 @@ class GAN():
                         print(f"{epoch} [D loss: {d_loss[0]}, " +
                       f"acc.: {accuracy}%] [G loss: {g_loss}]")
                 else:
-                    print(f"{epoch} [D loss: {d_loss[0]}, " +
-                      f"acc.: {accuracy}%] [G loss: {g_loss}]")
+                    print(f"{epoch} [D loss: {d_loss[0]:.3f}, " +
+                      f"acc.: {accuracy:.2f}%] [G loss: {g_loss:.3f}]")
 
                 # If at save interval => save generated image samples
                 if epoch % sample_interval == 0:
