@@ -29,9 +29,9 @@ TRAIN_ON_AUGMENTED = False
 AUGMENTED_FILES = ['../augmented_data_0.npy', '../augmented_data_1.npy', '../augmented_data_2.npy',
  '../augmented_data_3.npy', '../augmented_data_4.npy', '../augmented_data_5.npy', '../augmented_data_6.npy', ]
 
- EPOCHS = 30000
- BATCH_SIZE = 16
- SAMPLE_INTERVAL = 20
+EPOCHS = 30000
+BATCH_SIZE = 16
+SAMPLE_INTERVAL = 20
 
 class GAN():
     def __init__(self):
