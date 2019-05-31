@@ -19,13 +19,46 @@ import numpy as np
 
 class GAN():
     def __init__(self):
-        self.img_rows = 53
-        self.img_cols = 53
         self.channels = 1
-        self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.latent_dim = 100
 
         optimizer = Adam(0.0002, 0.5)
+
+        # Load the dataset
+        filelist = glob.glob("./source_imgs/*.jpg")
+        imgs = [Image.open(fname) for fname in filelist]
+
+        rescale_factor = 32
+
+        target_size  = (max([x.size[0] for x in imgs]),
+                        max([x.size[1] for x in imgs]))
+
+        target_size = tuple([x//rescale_factor for x in target_size])
+
+        self.X_train = []
+
+        for img in imgs:
+            old_size = img.size
+            ratio = min(target_size[0]/old_size[0],
+                        target_size[1]/old_size[1])
+
+            new_size = tuple([int(x*ratio) for x in old_size])
+            img = img.resize(new_size, Image.ANTIALIAS)
+            img = PIL.ImageOps.invert(img)
+            new_img = Image.new("L", target_size)
+            new_img.paste(img, ((target_size[0]-new_size[0])//2,
+                                (target_size[1]-new_size[1])//2))
+            self.X_train.append(new_img)
+
+        self.X_train = np.stack(self.X_train)
+
+        self.img_shape = (target_size[1],
+                          target_size[0],
+                          self.channels)
+
+        # Rescale -1 to 1
+        self.X_train = self.X_train / 127.5 - 1.
+        self.X_train = np.expand_dims(self.X_train, axis=3)
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
@@ -94,37 +127,6 @@ class GAN():
 
     def train(self, epochs, batch_size=128, sample_interval=50):
 
-        # Load the dataset
-        # (X_train_, _), (_, _) = mnist.load_data()
-        filelist = glob.glob("./source_imgs/*.jpg")
-        imgs = [Image.open(fname) for fname in filelist]
-
-        rescale_factor = 32
-
-        max_width  = max([x.size[0] for x in imgs])
-        max_height = max([x.size[1] for x in imgs])
-
-        X_train = []
-
-        for img in imgs:
-
-            old_size = img.size
-            desired_size = max(max_width, max_height)//rescale_factor
-            ratio = desired_size/max(old_size)
-            new_size = tuple([int(x*ratio) for x in old_size])
-            img = img.resize(new_size, Image.ANTIALIAS)
-            img = PIL.ImageOps.invert(img)
-            new_img = Image.new("L", (desired_size, desired_size))
-            new_img.paste(img, ((desired_size-new_size[0])//2,
-                                (desired_size-new_size[1])//2))
-            X_train.append(new_img)
-
-        X_train = np.stack(X_train)
-
-        # Rescale -1 to 1
-        X_train = X_train / 127.5 - 1.
-        X_train = np.expand_dims(X_train, axis=3)
-
         # Adversarial ground truths
         valid = np.ones((batch_size, 1))
         fake = np.zeros((batch_size, 1))
@@ -136,8 +138,8 @@ class GAN():
             # ---------------------
 
             # Select a random batch of images
-            idx = np.random.randint(0, X_train.shape[0], batch_size)
-            imgs = X_train[idx]
+            idx = np.random.randint(0, self.X_train.shape[0], batch_size)
+            imgs = self.X_train[idx]
 
             noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
