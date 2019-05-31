@@ -3,6 +3,7 @@ from __future__ import print_function, division
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Conv2D
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
+from keras.layers import Conv2DTranspose
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
@@ -143,23 +144,36 @@ class GAN():
 
         model = Sequential()
 
-        model.add(Dense(256, input_dim=self.latent_dim))
-        model.add(LeakyReLU(alpha=0.2))
+        # model.add(Conv2DTranspose(filters=8,
+        #                           kernel_size=(7,7),
+        #                           input_shape=self.latent_dim,
+        #                           padding="same"))
+
+        # model.add(Flatten())
+
+        model.add(Dense(248,
+                        input_shape=(self.latent_dim,),
+                        activation='relu'))
         model.add(BatchNormalization(momentum=0.8))
 
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dense(512,
+                        activation='relu'))
         model.add(BatchNormalization(momentum=0.8))
 
-        model.add(Dense(1024))
-        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dense(1024,
+                        activation='relu'))
         model.add(BatchNormalization(momentum=0.8))
+
+
+        model.add(Dense(2048,
+                        activation='relu'))
+        model.add(BatchNormalization(momentum=0.8))
+
 
         model.add(Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(Reshape(self.img_shape))
+        model.add(Reshape(target_shape=(self.img_shape)))
 
         model.summary()
-
         noise = Input(shape=(self.latent_dim,))
         img = model(noise)
 
@@ -177,12 +191,13 @@ class GAN():
 
         model.add(Conv2D(8, (7, 7),
                          activation='relu',
-                         padding='same',
-                         input_shape=self.img_shape))
+                         padding='same'))
 
-        model.add(Flatten(input_shape=self.img_shape))
+        model.add(Flatten())
+
         model.add(Dense(512))
         model.add(LeakyReLU(alpha=0.2))
+
         model.add(Dense(1, activation='sigmoid'))
         model.summary()
 
@@ -279,4 +294,4 @@ class GAN():
 
 if __name__ == '__main__':
     gan = GAN()
-    gan.train(epochs=30000, batch_size=16, sample_interval=20)
+    gan.train(epochs=30000, batch_size=16, sample_interval=100)
