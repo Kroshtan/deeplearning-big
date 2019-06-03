@@ -3,7 +3,7 @@ from __future__ import print_function, division
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Conv2D
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras.layers import Conv2DTranspose
+from keras.layers import Conv2DTranspose, MaxPooling2D, Concatenate
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
@@ -32,7 +32,7 @@ AUGMENTED_FILES = ['../augmented_data_0.npy', '../augmented_data_1.npy', '../aug
 
 EPOCHS = 30000
 BATCH_SIZE = 16
-SAMPLE_INTERVAL = 20
+SAMPLE_INTERVAL = 100
 
 class GAN():
     def __init__(self):
@@ -152,69 +152,81 @@ class GAN():
 
     def build_generator(self):
 
-        model = Sequential()
+        inp = Input(shape=(self.latent_dim,))
 
-        # model.add(Conv2DTranspose(filters=8,
-        #                           kernel_size=(7,7),
-        #                           input_shape=self.latent_dim,
-        #                           padding="same"))
+        layer1 = Dense(256,
+                       input_shape=(self.latent_dim,),
+                       activation='relu')(inp)
+        bn1 = BatchNormalization(momentum=0.8)(layer1)
 
-        # model.add(Flatten())
+        layer2 = Dense(512,
+                       activation='relu')(bn1)
+        bn2 = BatchNormalization(momentum=0.8)(layer2)
 
-        model.add(Dense(248,
-                        input_shape=(self.latent_dim,),
-                        activation='relu'))
-        model.add(BatchNormalization(momentum=0.8))
+        layer3 = Dense(1024,
+                       activation='relu')(bn2)
+        bn3 = BatchNormalization(momentum=0.8)(layer3)
 
-        model.add(Dense(512,
-                        activation='relu'))
-        model.add(BatchNormalization(momentum=0.8))
+        layer4 = Dense(2056,
+                       activation='relu')(bn3)
+        bn4 = BatchNormalization(momentum=0.8)(layer4)
 
-        model.add(Dense(1024,
-                        activation='relu'))
-        model.add(BatchNormalization(momentum=0.8))
+        concat = Concatenate(axis=-1)([bn1,bn2, bn3, bn4])
 
+        pre_out = Dense(np.prod(self.img_shape), activation='tanh')(concat)
 
-        model.add(Dense(2048,
-                        activation='relu'))
-        model.add(BatchNormalization(momentum=0.8))
+        out = Reshape(target_shape=(self.img_shape))(pre_out)
 
-
-        model.add(Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(Reshape(target_shape=(self.img_shape)))
+        model = Model(inputs=inp, outputs=out)
 
         model.summary()
-        noise = Input(shape=(self.latent_dim,))
-        img = model(noise)
 
-        return Model(noise, img)
+        return model
 
     def build_discriminator(self):
 
-        model = Sequential()
+        inp = Input(shape=self.img_shape)
 
+        conv1 = Conv2D(filters=8,
+                       kernel_size=(4, 4),
+                       activation='relu',
+                       padding='same')(inp)
+        mp1 = MaxPooling2D(pool_size=(2, 2))(conv1)
 
-        model.add(Conv2D(16, (8, 8),
-                         activation='relu',
-                         padding='same',
-                         input_shape=self.img_shape))
+        cfc1 = Flatten()(conv1)
+        cfc1 = Dense(128, activation='relu')(cfc1)
 
-        model.add(Conv2D(8, (16, 16),
-                         activation='relu',
-                         padding='same'))
+        conv2 = Conv2D(filters=12,
+                       kernel_size=(4, 4),
+                       activation='relu',
+                       padding='same')(mp1)
+        mp2 = MaxPooling2D(pool_size=(2, 2))(conv2)
 
-        model.add(Flatten())
+        cfc2 = Flatten()(conv2)
+        cfc2 = Dense(128, activation='relu')(cfc2)
 
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
+        conv3 = Conv2D(filters=16,
+                       kernel_size=(4, 4),
+                       activation='relu',
+                       padding='same')(mp2)
+        mp3 = MaxPooling2D(pool_size=(2, 2))(conv3)
 
-        model.add(Dense(1, activation='sigmoid'))
+        cfc3 = Flatten()(conv3)
+        cfc3 = Dense(128, activation='relu')(cfc3)
+
+        flatten = Flatten()(mp3)
+
+        flatten = Concatenate()([flatten, cfc1, cfc2, cfc3])
+
+        fc1 = Dense(512, activation='relu')(flatten)
+        fc2 = Dense(512, activation='relu')(fc1)
+
+        out = Dense(1, activation='sigmoid')(fc2)
+
+        model = Model(inputs=inp, outputs=out)
         model.summary()
 
-        img = Input(shape=self.img_shape)
-        validity = model(img)
-
-        return Model(img, validity)
+        return model
 
     def train(self, epochs, batch_size=1, sample_interval=50):
 
