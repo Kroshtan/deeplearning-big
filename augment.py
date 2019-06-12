@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.matlib as matlib
 import cv2
 from os import listdir
 from os.path import isfile, isdir, join, abspath
@@ -8,6 +9,36 @@ ROBINPATH 	= abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH 	= abspath("../")
 RESIZE_FACTOR = 32
+
+def padd_h(image, padding_height):
+	m = np.array([255], dtype=np.uint8)
+	(_, maxx) = image.shape
+	padding_top = matlib.repmat(m, padding_height // 2, maxx)
+	padding_bot = matlib.repmat(m, padding_height // 2 + padding_height % 2, maxx) #take care of the floored pixel
+
+	return np.concatenate((padding_top, image, padding_bot), axis=0)
+
+def padd_v(image, padding_width):
+	m = np.array([255], dtype=np.uint8)
+	(maxy, _) = image.shape
+	padding_left = matlib.repmat(m, maxy, padding_width // 2)
+	padding_right = matlib.repmat(m, maxy, padding_width // 2 + padding_width % 2)
+
+	return np.concatenate((padding_left, image, padding_right), axis=1)
+
+def padd_to_biggest_file(image, maxh, maxw):
+	(maxy, maxx) = image.shape
+	img = padd_h(image, maxh - maxy)
+	return padd_v(img, maxw - maxx)
+
+def scale_and_padd_to_biggest_file(image, maxh, maxw):
+	## todo implement scaling
+	(maxy, maxx) = image.shape
+	scale = maxw / maxx if maxh / maxy > maxw / maxx else maxh / maxy #take smallest scale to not go out of bounds
+
+	image = cv2.resize(image, (int(maxx * scale),int(maxy * scale) ) )
+
+	return padd_to_biggest_file(image, maxh, maxw)
 
 
 def loadAllFiles(path):
@@ -33,7 +64,7 @@ def rotate_image(img):
 
 
 
-def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=False, height=0, width=0):
+def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=False, resize_height=0, resize_width=0, max_height = 0, max_width = 0):
 	'''
 	Flip should be set to false for the advanced dataset
 	saveiter is the iteration at which the images get saved (and the ram freed)
@@ -47,8 +78,12 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 	for idx, imgpath in enumerate(images):
 		original_img = cv2.imread(imgpath)
 		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
+		original_img = scale_and_padd_to_biggest_file(original_img, max_height, max_width)
 		original_img = cv2.resize(original_img, (width,height))
 		#append original
+
+		cv2.imshow("", original_img)
+		cv2.waitKey(0)
 
 		final_images.append(deepcopy(original_img))
 
@@ -104,27 +139,30 @@ def find_dimensions(images):
 			max_width = width
 	resize_shape_height = max_height//RESIZE_FACTOR
 	resize_shape_width = max_width//RESIZE_FACTOR
-	return (resize_shape_height, resize_shape_width)
+	return (resize_shape_height, resize_shape_width, max_height, max_width)
 
 def get_max_img_sizes(images1, images2):
-	(height1, width1) = find_dimensions(images1)
-	(height2, width2) = find_dimensions(images2)
-	print(height1, width1)
-	print(height2, width2)
+	(height1, width1, mh1, mw1) = find_dimensions(images1)
+	(height2, width2, mh2, mw2) = find_dimensions(images2)
+	# print(height1, width1)
+	# print(height2, width2)
 
 	output_height = height1 if height1 > height2 else height2 
 	output_width = width1 if width1 > width2 else width2
 
-	return (output_height, output_width)
+	max_height = mh1 if mh1 > mh2 else mh2
+	max_width = mw1 if mw1 > mw2 else mw2
+
+	return (output_height, output_width, max_height, max_width)
 
 if __name__ == '__main__':
 	files1 = loadAllFiles(ROBINPATH)
 	files2 = loadAllFiles(COMPLEXPATH)
 
-	(height, width) = get_max_img_sizes(files1, files2)
+	(height, width, max_height, max_width) = get_max_img_sizes(files1, files2)
 	print(height, width)
 
-	augment_images(files1, 'robin_data', height=height, width=width)
-	augment_images(files2, 'complex_data', height=height, width=width) #the complex images are bigger, and should be saved less frequently for RAM
+	augment_images(files1, 'robin_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
+	augment_images(files2, 'complex_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
 
 	print("FINIHED")
