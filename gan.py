@@ -64,7 +64,6 @@ class GAN():
 
             os.mkdir(LOG_DIR)
             print('Created new log directory.')
-
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy',
