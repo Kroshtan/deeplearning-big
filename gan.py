@@ -4,6 +4,7 @@ from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Conv2D
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers import Conv2DTranspose, MaxPooling2D, Concatenate, LeakyReLU
+from keras.layers import Dropout
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
@@ -22,7 +23,7 @@ import sys
 import numpy as np
 
 PREPARE_COLAB_DATA = False
-RUN_ON_COLAB = True
+RUN_ON_COLAB = False
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 TRAIN_ON_AUGMENTED = False
@@ -37,27 +38,21 @@ RESCALE_FACTOR = 32
 class GAN():
     def __init__(self):
         self.channels = 1
-        self.latent_dim = 100
+        self.latent_dim = 300
 
-        optimizer = Adam(1e-3, decay=0.1)
+        optimizer = Adam(1e-3, decay=1e-4)
 
         self.logdir = "./logs"
-        try:
-          os.mkdir(self.logdir)
-          print('Created log directory...')
-        except:
-          print('Log directory already exists!')
 
         if not RUN_ON_COLAB:
             # Empty any old log directory
-            for the_file in os.listdir(self.logdir):
-                file_path = os.path.join(self.logdir, the_file)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path): shutil.rmtree(file_path)
-                except Exception as e:
-                    print(e)
+            if os.path.exists(self.logdir):
+                shutil.rmtree(self.logdir)
+                print("Removed old log directory.")
+
+            os.mkdir(self.logdir)
+            print('Created new log directory.')
+
 
             # Empty the generated image directory
             for the_file in os.listdir("./images"):
@@ -154,24 +149,27 @@ class GAN():
 
         inp = Input(shape=(self.latent_dim,))
 
-        layer1 = Dense(16,
+        layer1 = Dense(128,
                        input_shape=(self.latent_dim,))(inp)
         layer1 = LeakyReLU()(layer1)
         layer1 = BatchNormalization(momentum=0.8)(layer1)
+        layer1 = Dropout(rate=0.5)(layer1)
 
-        layer2 = Dense(16)(layer1)
+        layer2 = Dense(512)(layer1)
         layer2 = LeakyReLU()(layer2)
         layer2 = BatchNormalization(momentum=0.8)(layer2)
+        layer2 = Dropout(rate=0.5)(layer2)
 
-        layer3 = Dense(16)(layer2)
+        layer3 = Dense(256)(layer2)
         layer3 = LeakyReLU()(layer3)
         layer3 = BatchNormalization(momentum=0.8)(layer3)
+        layer3 = Dropout(rate=0.5)(layer3)
 
-        layer4 = Dense(16)(layer3)
-        layer4 = LeakyReLU()(layer4)
-        layer4 = BatchNormalization(momentum=0.8)(layer4)
+        # layer4 = Dense(16)(layer3)
+        # layer4 = LeakyReLU()(layer4)
+        # layer4 = BatchNormalization(momentum=0.8)(layer4)
 
-        concat = Concatenate(axis=-1)([layer1, layer2, layer3, layer4])
+        concat = Concatenate(axis=-1)([layer1, layer2, layer3])
 
         pre_out = Dense(np.prod(self.img_shape), activation='tanh')(concat)
 
@@ -187,41 +185,37 @@ class GAN():
 
         inp = Input(shape=self.img_shape)
 
-        conv1 = Conv2D(filters=8,
-                       kernel_size=(4, 4),
+        conv1 = Conv2D(filters=24,
+                       kernel_size=(5, 5),
                        activation='relu',
                        padding='same')(inp)
-        mp1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+        conv1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+        flat_conv1 = Flatten()(conv1)
+        flat_conv1 = Dense(512, activation='relu')(flat_conv1)
 
-        cfc1 = Flatten()(conv1)
-        cfc1 = Dense(128, activation='relu')(cfc1)
-
-        conv2 = Conv2D(filters=12,
-                       kernel_size=(4, 4),
+        conv2 = Conv2D(filters=24,
+                       kernel_size=(5, 5),
                        activation='relu',
-                       padding='same')(mp1)
-        mp2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+                       padding='same')(conv1)
+        conv2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+        flat_conv2 = Flatten()(conv2)
+        flat_conv2 = Dense(512, activation='relu')(flat_conv2)
 
-        cfc2 = Flatten()(conv2)
-        cfc2 = Dense(128, activation='relu')(cfc2)
 
         conv3 = Conv2D(filters=16,
-                       kernel_size=(4, 4),
+                       kernel_size=(5, 5),
                        activation='relu',
-                       padding='same')(mp2)
-        mp3 = MaxPooling2D(pool_size=(2, 2))(conv3)
+                       padding='same')(conv2)
+        conv3 = MaxPooling2D(pool_size=(2, 2))(conv3)
+        flat_conv3 = Flatten()(conv3)
+        flat_conv3 = Dense(512, activation='relu')(flat_conv3)
 
-        cfc3 = Flatten()(conv3)
-        cfc3 = Dense(256, activation='relu')(cfc3)
 
-        flatten = Flatten()(mp3)
+        fc = Concatenate()([flat_conv1, flat_conv2, flat_conv3])
 
-        flatten = Concatenate()([flatten, cfc1, cfc2, cfc3])
+        fc = Dense(1024, activation='relu')(fc)
 
-        fc1 = Dense(512, activation='relu')(flatten)
-        fc2 = Dense(512, activation='relu')(fc1)
-
-        out = Dense(1, activation='sigmoid')(fc2)
+        out = Dense(1, activation='sigmoid')(fc)
 
         model = Model(inputs=inp, outputs=out)
         model.summary()
@@ -248,12 +242,12 @@ class GAN():
                 idx = np.random.randint(0, self.X_train.shape[0], batch_size)
                 imgs = self.X_train[idx]
 
-                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
+                noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
                 # Generate a batch of new images
                 gen_imgs = self.generator.predict(noise)
 
-                if epoch == 0 or accuracy < 80:
+                if epoch == 0 or accuracy < 60:
                     # Train the discriminator
                     d_loss_real = self.discriminator.train_on_batch(imgs, valid)
                     d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
@@ -269,9 +263,9 @@ class GAN():
                 # ---------------------
                 #  Train Generator
                 # ---------------------
-                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
+                noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
-                if epoch == 0 or accuracy > 20:
+                if epoch == 0 or accuracy > 40:
                     # Train the generator (to have the discriminator label samples as valid)
                     g_loss = self.combined.train_on_batch(noise, valid)
                 else:
@@ -296,20 +290,28 @@ class GAN():
         tensorboard.on_train_end()
 
     def sample_images(self, epoch):
-        r, c = 5, 5
-        noise = np.random.normal(0, 1, (r * c, self.latent_dim))
+        r, c = 3, 3
+        noise = np.random.normal(-1, 1, (r * c, self.latent_dim))
         gen_imgs = self.generator.predict(noise)
 
         # Rescale images from [-1, 1] to [1, 0] (invert)
+        real_imgs = self.X_train[np.random.choice(self.X_train.shape[0], size=c), :, :, 0]
         gen_imgs = -0.5 * gen_imgs - 0.5
+        real_imgs = -0.5 * real_imgs - 0.5
 
-        fig, axs = plt.subplots(r, c)
+        fig, axs = plt.subplots(1+r, c)
+
+        for j in range(c):
+            axs[0,j].imshow(real_imgs[j], cmap='gray')
+            axs[0,j].axis('off')
+
         cnt = 0
         for i in range(r):
             for j in range(c):
-                axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
-                axs[i,j].axis('off')
+                axs[i+1,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
+                axs[i+1,j].axis('off')
                 cnt += 1
+
         fig.savefig(IMAGE_DIR+"%d.png" % epoch)
         plt.close()
 
