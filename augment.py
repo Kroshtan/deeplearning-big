@@ -7,6 +7,7 @@ from copy import deepcopy
 ROBINPATH 	= abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH 	= abspath("../")
+RESIZE_FACTOR = 32
 
 
 def loadAllFiles(path):
@@ -42,11 +43,26 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 	'''
 	final_images = []
 	saveidx = 0
+
+	# Get size of largest image
+	max_height = 0
+	max_width = 0
+	for idx, imgpath in enumerate(images):
+		original_img = cv2.imread(imgpath)
+		(height, width, _) = original_img.shape
+		if height > max_height:
+			max_height = height
+		if width > max_width:
+			max_width = width
+	resize_shape_height = max_height//RESIZE_FACTOR
+	resize_shape_width = max_width//RESIZE_FACTOR
+
 	for idx, imgpath in enumerate(images):
 		original_img = cv2.imread(imgpath)
 		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
-
+		original_img = cv2.resize(original_img, (resize_shape_width,resize_shape_height))
 		#append original
+
 		final_images.append(deepcopy(original_img))
 
 		#add rotations
