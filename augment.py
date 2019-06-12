@@ -1,13 +1,13 @@
 import numpy as np
 import numpy.matlib as matlib
 import cv2
-from os import listdir
+from os import listdir, mkdir
 from os.path import isfile, isdir, join, abspath
 from copy import deepcopy
 
 ROBINPATH 	= abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
-OUTPATH 	= abspath("../")
+OUTPATH 	= abspath("./augmented")
 RESIZE_FACTOR = 32
 
 def padd_h(image, padding_height):
@@ -62,14 +62,12 @@ def rotate_image(img):
 
 	return rotated
 
-
-
 def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=False, resize_height=0, resize_width=0, max_height = 0, max_width = 0):
 	'''
 	Flip should be set to false for the advanced dataset
 	saveiter is the iteration at which the images get saved (and the ram freed)
 
-	Rotation code is now very ugly, but this is due to the rotation code being very inefficient, so I tried to use 
+	Rotation code is now very ugly, but this is due to the rotation code being very inefficient, so I tried to use
 	it as little as possible
 	'''
 	final_images = []
@@ -79,11 +77,7 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 		original_img = cv2.imread(imgpath)
 		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
 		original_img = scale_and_padd_to_biggest_file(original_img, max_height, max_width)
-		original_img = cv2.resize(original_img, (width,height))
-		#append original
-
-		cv2.imshow("", original_img)
-		cv2.waitKey(0)
+		original_img = cv2.resize(original_img, (resize_width, resize_height))
 
 		final_images.append(deepcopy(original_img))
 
@@ -93,9 +87,6 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 		rot_img = rotate_image(img)
 		final_images.append(rot_img)
 		final_images.append(np.flip(rot_img, 1))
-
-		
-		
 
 		#mirror and rotate
 		if flip:
@@ -107,7 +98,7 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 			final_images.append(np.flip(rot_img, 1))
 
 		#save images to numpy array
-		if idx % saveiter == 0 and not saveaspng and False: #Don't run this part, we want to save in 1 file 
+		if idx % saveiter == 0 and not saveaspng: #Don't run this part, we want to save in 1 file
 			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
 			saveidx += 1
 			final_images = []
@@ -120,12 +111,11 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 			final_images = []
 
 
-
-	final_images = np.array(final_images)
 	np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
+
 	print("augmented and saved all files")
 
-def find_dimensions(images):
+def get_max_dims(images):
 	# Get size of largest image
 	max_height = 0
 	max_width = 0
@@ -139,30 +129,21 @@ def find_dimensions(images):
 			max_width = width
 	resize_shape_height = max_height//RESIZE_FACTOR
 	resize_shape_width = max_width//RESIZE_FACTOR
+
 	return (resize_shape_height, resize_shape_width, max_height, max_width)
 
-def get_max_img_sizes(images1, images2):
-	(height1, width1, mh1, mw1) = find_dimensions(images1)
-	(height2, width2, mh2, mw2) = find_dimensions(images2)
-	# print(height1, width1)
-	# print(height2, width2)
-
-	output_height = height1 if height1 > height2 else height2 
-	output_width = width1 if width1 > width2 else width2
-
-	max_height = mh1 if mh1 > mh2 else mh2
-	max_width = mw1 if mw1 > mw2 else mw2
-
-	return (output_height, output_width, max_height, max_width)
 
 if __name__ == '__main__':
-	files1 = loadAllFiles(ROBINPATH)
-	files2 = loadAllFiles(COMPLEXPATH)
 
-	(height, width, max_height, max_width) = get_max_img_sizes(files1, files2)
-	print(height, width)
+	files_robin = loadAllFiles(ROBINPATH)
+	files_complex = loadAllFiles(COMPLEXPATH)
+	(height, width, max_height, max_width) = get_max_dims(files_robin + files_complex)
 
-	augment_images(files1, 'robin_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
-	augment_images(files2, 'complex_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
+	if not isdir(OUTPATH):
+		mkdir(OUTPATH)
 
-	print("FINIHED")
+	augment_images(files_robin, 'robin_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
+	print("Done with ROBIN")
+	augment_images(files_complex, 'complex_data', resize_height=height, resize_width=width, max_height = max_height, max_width=max_width)
+	print("Done with Complex")
+	print("FINISHED")
