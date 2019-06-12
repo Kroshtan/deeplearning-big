@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from os import listdir
 from os.path import isfile, isdir, join, abspath
+from copy import deepcopy
 
 ROBINPATH 	= abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
@@ -21,7 +22,7 @@ def loadAllFiles(path):
 
 def rotate_image(img):
 	(maxy, maxx) = np.shape(img)
-	rotated = np.zeros((maxx, maxy), dtype=np.uint)
+	rotated = np.zeros((maxx, maxy), dtype=np.uint8)
 
 	for y in range(maxy):
 		for x in range(maxx):
@@ -35,6 +36,9 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 	'''
 	Flip should be set to false for the advanced dataset
 	saveiter is the iteration at which the images get saved (and the ram freed)
+
+	Rotation code is now very ugly, but this is due to the rotation code being very inefficient, so I tried to use 
+	it as little as possible
 	'''
 	final_images = []
 	saveidx = 0
@@ -43,25 +47,26 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
 
 		#append original
-		final_images.append(original_img)
+		final_images.append(deepcopy(original_img))
 
-		#rotate
-		(height, width) = np.shape(original_img)
-		for rot in range(90, 360, 90):
-			# rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
-			# img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
-			img = rotate_image(original_img)
-			final_images.append(img)
+		#add rotations
+		img = deepcopy(original_img)
+		final_images.append(np.flip(img, 0))
+		rot_img = rotate_image(img)
+		final_images.append(rot_img)
+		final_images.append(np.flip(rot_img, 1))
+
+		
+		
 
 		#mirror and rotate
 		if flip:
-			original_img = np.flip(original_img, 0);
-			final_images.append(original_img)
-			for rot in range(90, 360, 90):
-				# rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
-				# img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
-				img = rotate_image(original_img)
-				final_images.append(img)
+			img = np.flip(original_img, 1);
+			final_images.append(deepcopy(img))
+			final_images.append(np.flip(img, 0))
+			rot_img = rotate_image(img)
+			final_images.append(rot_img)
+			final_images.append(np.flip(rot_img, 1))
 
 		#save images to numpy array
 		if idx % saveiter == 0 and not saveaspng:
