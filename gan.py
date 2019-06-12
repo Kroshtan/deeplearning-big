@@ -78,10 +78,11 @@ class GAN():
                 print("Output images directory already exists!")
             if TRAIN_ON_AUGMENTED:
                 self.X_train = np.load(SIMPLE_DATA[0], allow_pickle=True)
-
             else:
                 self.X_train = np.stack(np.load(NPY_SAVEFILE, allow_pickle=True))
+            self.X_train = np.expand_dims(self.X_train, axis=3)
             target_size = (max([x.shape[1] for x in self.X_train]), max([x.shape[0] for x in self.X_train]))
+            #target_size = (self.X_train[0].shape[1], self.X_train[1].shape[0])
             self.img_shape = (target_size[1], target_size[0], self.channels)
         # else:
         #     # Load the dataset
