@@ -6,7 +6,7 @@ from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers import Conv2DTranspose, MaxPooling2D, Concatenate, LeakyReLU
 from keras.layers import Dropout
 from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
 from keras.optimizers import Adam
 from keras.preprocessing.image import load_img, img_to_array, array_to_img
 from keras.callbacks import TensorBoard
@@ -34,6 +34,7 @@ EPOCHS = 30000
 BATCH_SIZE = 16
 SAMPLE_INTERVAL = 100
 RESCALE_FACTOR = 32
+TRAIN_ON_COMPLEX
 
 class GAN():
     def __init__(self):
@@ -288,6 +289,8 @@ class GAN():
                     self.sample_images(epoch)
             self.X_train = np.load(AUGMENTED_FILES[idx])
         tensorboard.on_train_end()
+        self.discriminator.save('discriminator.h5')
+        self.generator.save('generator.h5')
 
     def sample_images(self, epoch):
         r, c = 3, 3
