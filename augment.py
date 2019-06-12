@@ -19,6 +19,18 @@ def loadAllFiles(path):
     print("found %d files on %s" % (len(files), str(path)))
     return files
 
+def rotate_image(img):
+	(maxy, maxx) = np.shape(img)
+	rotated = np.zeros((maxx, maxy), dtype=np.uint)
+
+	for y in range(maxy):
+		for x in range(maxx):
+			rotated[x, y] = img[y, x]
+
+	return rotated
+
+
+
 def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=False):
 	'''
 	Flip should be set to false for the advanced dataset
@@ -36,8 +48,9 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 		#rotate
 		(height, width) = np.shape(original_img)
 		for rot in range(90, 360, 90):
-			rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
-			img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
+			# rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
+			# img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
+			img = rotate_image(original_img)
 			final_images.append(img)
 
 		#mirror and rotate
@@ -45,8 +58,9 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 			original_img = np.flip(original_img, 0);
 			final_images.append(original_img)
 			for rot in range(90, 360, 90):
-				rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
-				img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
+				# rotationMatrix = cv2.getRotationMatrix2D((width/2, height/2), rot, .5)
+				# img = cv2.warpAffine(original_img, rotationMatrix, (width, height))
+				img = rotate_image(original_img)
 				final_images.append(img)
 
 		#save images to numpy array
