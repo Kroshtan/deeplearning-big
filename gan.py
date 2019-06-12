@@ -80,7 +80,7 @@ class GAN():
             except:
                 print("Output images directory already exists!")
             if TRAIN_ON_AUGMENTED:
-                self.X_train = np.load(SIMPLE_DATA[0], allow_pickle=True)
+                self.X_train = np.load(COMPLEX_DATA[0], allow_pickle=True)
             else:
                 self.X_train = np.stack(np.load(NPY_SAVEFILE, allow_pickle=True))
             self.X_train = np.expand_dims(self.X_train, axis=3)
