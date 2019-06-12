@@ -1,12 +1,12 @@
 import numpy as np
 import cv2
-from os import listdir
+from os import listdir, mkdir
 from os.path import isfile, isdir, join, abspath
 from copy import deepcopy
 
-ROBINPATH 	= abspath("../ROBIN")
-COMPLEXPATH = abspath("../Dataset_complex")
-OUTPATH 	= abspath("../")
+ROBINPATH 	= abspath("./ROBIN")
+COMPLEXPATH = abspath("./Dataset_complex")
+OUTPATH 	= abspath("./augmented")
 RESIZE_FACTOR = 32
 
 
@@ -33,17 +33,61 @@ def rotate_image(img):
 
 
 
-def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=False):
+def augment_images(images, filename, max_height, max_width, flip = True, saveiter = 16, saveaspng=False):
 	'''
 	Flip should be set to false for the advanced dataset
 	saveiter is the iteration at which the images get saved (and the ram freed)
 
-	Rotation code is now very ugly, but this is due to the rotation code being very inefficient, so I tried to use 
+	Rotation code is now very ugly, but this is due to the rotation code being very inefficient, so I tried to use
 	it as little as possible
 	'''
 	final_images = []
 	saveidx = 0
 
+	for idx, imgpath in enumerate(images):
+		original_img = cv2.imread(imgpath)
+		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
+		original_img = cv2.resize(original_img, (max_width,max_height))
+		#append original
+
+		final_images.append(deepcopy(original_img))
+
+		#add rotations
+		img = deepcopy(original_img)
+		final_images.append(np.flip(img, 0))
+		rot_img = rotate_image(img)
+		final_images.append(rot_img)
+		final_images.append(np.flip(rot_img, 1))
+
+		#mirror and rotate
+		if flip:
+			img = np.flip(original_img, 1);
+			final_images.append(deepcopy(img))
+			final_images.append(np.flip(img, 0))
+			rot_img = rotate_image(img)
+			final_images.append(rot_img)
+			final_images.append(np.flip(rot_img, 1))
+
+		#save images to numpy array
+		if idx % saveiter == 0 and not saveaspng: #Don't run this part, we want to save in 1 file
+			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
+			saveidx += 1
+			final_images = []
+
+		#save all images individually
+		if saveaspng:
+			for img in final_images:
+				cv2.imwrite('filename_%d.png' % (saveidx), img)
+				saveidx += 1
+			final_images = []
+
+
+	np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
+
+	print("augmented and saved all files")
+
+
+def get_max_dims(images):
 	# Get size of largest image
 	max_height = 0
 	max_width = 0
@@ -58,58 +102,19 @@ def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=
 	resize_shape_height = max_height//RESIZE_FACTOR
 	resize_shape_width = max_width//RESIZE_FACTOR
 
-	for idx, imgpath in enumerate(images):
-		original_img = cv2.imread(imgpath)
-		original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY) #set to one channel
-		original_img = cv2.resize(original_img, (resize_shape_width,resize_shape_height))
-		#append original
-
-		final_images.append(deepcopy(original_img))
-
-		#add rotations
-		img = deepcopy(original_img)
-		final_images.append(np.flip(img, 0))
-		rot_img = rotate_image(img)
-		final_images.append(rot_img)
-		final_images.append(np.flip(rot_img, 1))
-
-		
-		
-
-		#mirror and rotate
-		if flip:
-			img = np.flip(original_img, 1);
-			final_images.append(deepcopy(img))
-			final_images.append(np.flip(img, 0))
-			rot_img = rotate_image(img)
-			final_images.append(rot_img)
-			final_images.append(np.flip(rot_img, 1))
-
-		#save images to numpy array
-		if idx % saveiter == 0 and not saveaspng and False: #Don't run this part, we want to save in 1 file 
-			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
-			saveidx += 1
-			final_images = []
-
-		#save all images individually
-		if saveaspng:
-			for img in final_images:
-				cv2.imwrite('filename_%d.png' % (saveidx), img)
-				saveidx += 1
-			final_images = []
-
-
-
-
-	np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
-	print("augmented and saved all files")
+	return resize_shape_height, resize_shape_width
 
 
 if __name__ == '__main__':
-	files = loadAllFiles(ROBINPATH)
-	augment_images(files, 'robin_data')
+	if not isdir(OUTPATH):
+		mkdir(OUTPATH)
 
-	files = loadAllFiles(COMPLEXPATH)
-	augment_images(files, 'complex_data') #the complex images are bigger, and should be saved less frequently for RAM
+	files_robin = loadAllFiles(ROBINPATH)
+	files_complex = loadAllFiles(COMPLEXPATH)
+
+	max_height, max_width = get_max_dims(files_robin + files_complex)
+
+	augment_images(files_robin, 'robin_data', max_height, max_width)
+	augment_images(files_complex, 'complex_data', max_height, max_width) #the complex images are bigger, and should be saved less frequently for RAM
 
 	print("FINIHED")
