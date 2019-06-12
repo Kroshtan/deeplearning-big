@@ -23,18 +23,19 @@ import sys
 import numpy as np
 
 PREPARE_COLAB_DATA = False
-RUN_ON_COLAB = False
+RUN_ON_COLAB = True
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
-TRAIN_ON_AUGMENTED = False
-AUGMENTED_FILES = ['../augmented_data_0.npy', '../augmented_data_1.npy', '../augmented_data_2.npy',
- '../augmented_data_3.npy', '../augmented_data_4.npy', '../augmented_data_5.npy', '../augmented_data_6.npy', ]
+TRAIN_ON_AUGMENTED = True
+
+SIMPLE_DATA = ['../robin_data_0.npy']
+COMPLEX_DATA = ['../complex_data_0.npy']
 
 EPOCHS = 30000
 BATCH_SIZE = 16
 SAMPLE_INTERVAL = 100
 RESCALE_FACTOR = 32
-TRAIN_ON_COMPLEX
+TRAIN_ON_COMPLEX = False
 
 class GAN():
     def __init__(self):
@@ -76,46 +77,46 @@ class GAN():
             except:
                 print("Output images directory already exists!")
             if TRAIN_ON_AUGMENTED:
-                self.X_train = np.load(AUGMENTED_FILES[0])
+                self.X_train = np.load(SIMPLE_DATA[0], allow_pickle=True)
+
             else:
-                self.X_train = np.load(NPY_SAVEFILE)
-            print(self.X_train.shape)
+                self.X_train = np.stack(np.load(NPY_SAVEFILE, allow_pickle=True))
             target_size = (max([x.shape[1] for x in self.X_train]), max([x.shape[0] for x in self.X_train]))
             self.img_shape = (target_size[1], target_size[0], self.channels)
-        else:
-            # Load the dataset
-            filelist = glob.glob("./source_imgs/*.jpg")
-            imgs = [Image.open(fname) for fname in filelist]
+        # else:
+        #     # Load the dataset
+        #     filelist = glob.glob("./source_imgs/*.jpg")
+        #     imgs = [Image.open(fname) for fname in filelist]
 
-            self.target_size  = (max([x.size[0] for x in imgs]),
-                                 max([x.size[1] for x in imgs]))
+        #     self.target_size  = (max([x.size[0] for x in imgs]),
+        #                          max([x.size[1] for x in imgs]))
 
-            self.target_size = tuple([x//RESCALE_FACTOR for x in self.target_size])
+        #     self.target_size = tuple([x//RESCALE_FACTOR for x in self.target_size])
 
-            self.X_train = []
+        #     self.X_train = []
 
-            for img in imgs:
-                old_size = img.size
-                ratio = min(self.target_size[0]/old_size[0],
-                            self.target_size[1]/old_size[1])
+        #     for img in imgs:
+        #         old_size = img.size
+        #         ratio = min(self.target_size[0]/old_size[0],
+        #                     self.target_size[1]/old_size[1])
 
-                new_size = tuple([int(x*ratio) for x in old_size])
-                img = img.resize(new_size, Image.ANTIALIAS)
-                img = PIL.ImageOps.invert(img)
-                new_img = Image.new("L", self.target_size)
-                new_img.paste(img, ((self.target_size[0]-new_size[0])//2,
-                                    (self.target_size[1]-new_size[1])//2))
-                self.X_train.append(new_img)
+        #         new_size = tuple([int(x*ratio) for x in old_size])
+        #         img = img.resize(new_size, Image.ANTIALIAS)
+        #         img = PIL.ImageOps.invert(img)
+        #         new_img = Image.new("L", self.target_size)
+        #         new_img.paste(img, ((self.target_size[0]-new_size[0])//2,
+        #                             (self.target_size[1]-new_size[1])//2))
+        #         self.X_train.append(new_img)
 
-            self.X_train = np.stack(self.X_train)
+        #     self.X_train = np.stack(self.X_train)
 
-            self.img_shape = (self.target_size[1],
-                              self.target_size[0],
-                              self.channels)
+        #     self.img_shape = (self.target_size[1],
+        #                       self.target_size[0],
+        #                       self.channels)
 
-            # Rescale -1 to 1
-            self.X_train = self.X_train / 127.5 - 1.
-            self.X_train = np.expand_dims(self.X_train, axis=3)
+        #     # Rescale -1 to 1
+        #     self.X_train = self.X_train / 127.5 - 1.
+        #     self.X_train = np.expand_dims(self.X_train, axis=3)
 
         if PREPARE_COLAB_DATA:
             np.save(NPY_SAVEFILE, self.X_train)
@@ -231,63 +232,61 @@ class GAN():
 
         tensorboard = TensorBoard(log_dir=self.logdir)
         tensorboard.set_model(self.discriminator)
+        for epoch in range(epochs):
 
-        for idx in range(0, len(AUGMENTED_FILES)):
-            for epoch in range(epochs):
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
 
-                # ---------------------
-                #  Train Discriminator
-                # ---------------------
+            # Select a random batch of images
+            idx = np.random.randint(0, len(self.X_train), batch_size)
+            imgs = self.X_train[idx]
+            print(self.X_train.shape)
 
-                # Select a random batch of images
-                idx = np.random.randint(0, self.X_train.shape[0], batch_size)
-                imgs = self.X_train[idx]
+            noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
-                noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
+            # Generate a batch of new images
+            gen_imgs = self.generator.predict(noise)
 
-                # Generate a batch of new images
-                gen_imgs = self.generator.predict(noise)
+            if epoch == 0 or accuracy < 60:
+                # Train the discriminator
+                d_loss_real = self.discriminator.train_on_batch(imgs, valid)
+                d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
+                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            else:
+                # Test the discriminator
+                d_loss_real = self.discriminator.test_on_batch(imgs, valid)
+                d_loss_fake = self.discriminator.test_on_batch(gen_imgs, fake)
+                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-                if epoch == 0 or accuracy < 60:
-                    # Train the discriminator
-                    d_loss_real = self.discriminator.train_on_batch(imgs, valid)
-                    d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-                    d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-                else:
-                    # Test the discriminator
-                    d_loss_real = self.discriminator.test_on_batch(imgs, valid)
-                    d_loss_fake = self.discriminator.test_on_batch(gen_imgs, fake)
-                    d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            accuracy = 100*d_loss[1]
 
-                accuracy = 100*d_loss[1]
+            # ---------------------
+            #  Train Generator
+            # ---------------------
+            noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
-                # ---------------------
-                #  Train Generator
-                # ---------------------
-                noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
+            if epoch == 0 or accuracy > 40:
+                # Train the generator (to have the discriminator label samples as valid)
+                g_loss = self.combined.train_on_batch(noise, valid)
+            else:
+                # Train the generator (to have the discriminator label samples as valid)
+                g_loss = self.combined.test_on_batch(noise, valid)
 
-                if epoch == 0 or accuracy > 40:
-                    # Train the generator (to have the discriminator label samples as valid)
-                    g_loss = self.combined.train_on_batch(noise, valid)
-                else:
-                    # Train the generator (to have the discriminator label samples as valid)
-                    g_loss = self.combined.test_on_batch(noise, valid)
+            tensorboard.on_epoch_end(epoch, {'generator loss': g_loss, 'discriminator loss': d_loss[0], 'Accuracy': accuracy})
 
-                tensorboard.on_epoch_end(epoch, {'generator loss': g_loss, 'discriminator loss': d_loss[0], 'Accuracy': accuracy})
+            # Plot the progress
+            if RUN_ON_COLAB:
+                if (epoch % 200) == 0:
+                    print(f"{epoch} [D loss: {d_loss[0]}, " +
+                  f"acc.: {accuracy}%] [G loss: {g_loss}]")
+            else:
+                print(f"{epoch} [D loss: {d_loss[0]:.3f}, " +
+                  f"acc.: {accuracy:.2f}%] [G loss: {g_loss:.3f}]")
 
-                # Plot the progress
-                if RUN_ON_COLAB:
-                    if (epoch % 200) == 0:
-                        print(f"{epoch} [D loss: {d_loss[0]}, " +
-                      f"acc.: {accuracy}%] [G loss: {g_loss}]")
-                else:
-                    print(f"{epoch} [D loss: {d_loss[0]:.3f}, " +
-                      f"acc.: {accuracy:.2f}%] [G loss: {g_loss:.3f}]")
-
-                # If at save interval => save generated image samples
-                if epoch % sample_interval == 0:
-                    self.sample_images(epoch)
-            self.X_train = np.load(AUGMENTED_FILES[idx])
+            # If at save interval => save generated image samples
+            if epoch % sample_interval == 0:
+                self.sample_images(epoch)
         tensorboard.on_train_end()
         self.discriminator.save('discriminator.h5')
         self.generator.save('generator.h5')

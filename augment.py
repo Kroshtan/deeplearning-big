@@ -33,7 +33,7 @@ def rotate_image(img):
 
 
 
-def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=False):
+def augment_images(images, filename, flip = True, saveiter = 1000000, saveaspng=False):
 	'''
 	Flip should be set to false for the advanced dataset
 	saveiter is the iteration at which the images get saved (and the ram freed)
@@ -47,6 +47,7 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 	# Get size of largest image
 	max_height = 0
 	max_width = 0
+
 	for idx, imgpath in enumerate(images):
 		original_img = cv2.imread(imgpath)
 		(height, width, _) = original_img.shape
@@ -85,7 +86,7 @@ def augment_images(images, filename, flip = True, saveiter = 100, saveaspng=Fals
 			final_images.append(np.flip(rot_img, 1))
 
 		#save images to numpy array
-		if idx % saveiter == 0 and not saveaspng:
+		if idx % saveiter == 0 and not saveaspng and False: #Don't run this part, we want to save in 1 file 
 			np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
 			saveidx += 1
 			final_images = []
@@ -109,6 +110,6 @@ if __name__ == '__main__':
 	augment_images(files, 'robin_data')
 
 	files = loadAllFiles(COMPLEXPATH)
-	augment_images(files, 'complex_data', False, 50) #the complex images are bigger, and should be saved less frequently for RAM
+	augment_images(files, 'complex_data') #the complex images are bigger, and should be saved less frequently for RAM
 
 	print("FINIHED")

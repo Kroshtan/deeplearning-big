@@ -1,12 +1,11 @@
 import numpy as np
 import cv2
 #FILENAMES = ['complex_data_0.npy', 'complex_data_1.npy', 'complex_data_3.npy', 'complex_data_4.npy']
-FILENAMES = ['robin_data_0.npy', 'robin_data_1.npy']
+FILENAMES = ['augmented_data_0.npy']
 WIDTH = HEIGHT = 500
 
 def open_file(filename):
 	images = np.load(filename, allow_pickle=True)
-	print(np.shape(images))
 	for image in images:
 		image = cv2.resize(image,(WIDTH,HEIGHT))
 		cv2.imshow('image',image)
