@@ -3,8 +3,7 @@ from __future__ import print_function, division
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Conv2D
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras.layers import Conv2DTranspose, MaxPooling2D, Concatenate
-from keras.layers.advanced_activations import LeakyReLU
+from keras.layers import Conv2DTranspose, MaxPooling2D, Concatenate, LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
@@ -33,14 +32,14 @@ AUGMENTED_FILES = ['../augmented_data_0.npy', '../augmented_data_1.npy', '../aug
 EPOCHS = 30000
 BATCH_SIZE = 16
 SAMPLE_INTERVAL = 100
+RESCALE_FACTOR = 32
 
 class GAN():
     def __init__(self):
         self.channels = 1
         self.latent_dim = 100
-        rescale_factor = 32
 
-        optimizer = Adam(0.0001, 0.5)
+        optimizer = Adam(1e-3, decay=0.1)
 
         self.logdir = "./logs"
         try:
@@ -94,7 +93,7 @@ class GAN():
             self.target_size  = (max([x.size[0] for x in imgs]),
                                  max([x.size[1] for x in imgs]))
 
-            self.target_size = tuple([x//rescale_factor for x in self.target_size])
+            self.target_size = tuple([x//RESCALE_FACTOR for x in self.target_size])
 
             self.X_train = []
 
@@ -154,24 +153,24 @@ class GAN():
 
         inp = Input(shape=(self.latent_dim,))
 
-        layer1 = Dense(256,
-                       input_shape=(self.latent_dim,),
-                       activation='relu')(inp)
-        bn1 = BatchNormalization(momentum=0.8)(layer1)
+        layer1 = Dense(16,
+                       input_shape=(self.latent_dim,))(inp)
+        layer1 = LeakyReLU()(layer1)
+        layer1 = BatchNormalization(momentum=0.8)(layer1)
 
-        layer2 = Dense(512,
-                       activation='relu')(bn1)
-        bn2 = BatchNormalization(momentum=0.8)(layer2)
+        layer2 = Dense(16)(layer1)
+        layer2 = LeakyReLU()(layer2)
+        layer2 = BatchNormalization(momentum=0.8)(layer2)
 
-        layer3 = Dense(1024,
-                       activation='relu')(bn2)
-        bn3 = BatchNormalization(momentum=0.8)(layer3)
+        layer3 = Dense(16)(layer2)
+        layer3 = LeakyReLU()(layer3)
+        layer3 = BatchNormalization(momentum=0.8)(layer3)
 
-        layer4 = Dense(2056,
-                       activation='relu')(bn3)
-        bn4 = BatchNormalization(momentum=0.8)(layer4)
+        layer4 = Dense(16)(layer3)
+        layer4 = LeakyReLU()(layer4)
+        layer4 = BatchNormalization(momentum=0.8)(layer4)
 
-        concat = Concatenate(axis=-1)([bn1,bn2, bn3, bn4])
+        concat = Concatenate(axis=-1)([layer1, layer2, layer3, layer4])
 
         pre_out = Dense(np.prod(self.img_shape), activation='tanh')(concat)
 
@@ -212,7 +211,7 @@ class GAN():
         mp3 = MaxPooling2D(pool_size=(2, 2))(conv3)
 
         cfc3 = Flatten()(conv3)
-        cfc3 = Dense(128, activation='relu')(cfc3)
+        cfc3 = Dense(256, activation='relu')(cfc3)
 
         flatten = Flatten()(mp3)
 
