@@ -22,7 +22,7 @@ import sys
 import numpy as np
 
 PREPARE_COLAB_DATA = False
-RUN_ON_COLAB = False
+RUN_ON_COLAB = True
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 TRAIN_ON_AUGMENTED = False
@@ -48,25 +48,26 @@ class GAN():
         except:
           print('Log directory already exists!')
 
-        # Empty any old log directory
-        for the_file in os.listdir(self.logdir):
-            file_path = os.path.join(self.logdir, the_file)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path): shutil.rmtree(file_path)
-            except Exception as e:
-                print(e)
+        if not RUN_ON_COLAB:
+            # Empty any old log directory
+            for the_file in os.listdir(self.logdir):
+                file_path = os.path.join(self.logdir, the_file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path): shutil.rmtree(file_path)
+                except Exception as e:
+                    print(e)
 
-        # Empty the generated image directory
-        for the_file in os.listdir("./images"):
-            file_path = os.path.join("./images", the_file)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path): shutil.rmtree(file_path)
-            except Exception as e:
-                print(e)
+            # Empty the generated image directory
+            for the_file in os.listdir("./images"):
+                file_path = os.path.join("./images", the_file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path): shutil.rmtree(file_path)
+                except Exception as e:
+                    print(e)
 
 
         # Load the dataset
