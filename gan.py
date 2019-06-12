@@ -28,8 +28,8 @@ NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 TRAIN_ON_AUGMENTED = True
 
-SIMPLE_DATA = ['../robin_data_0.npy']
-COMPLEX_DATA = ['../complex_data_0.npy']
+SIMPLE_DATA = ['./robin_data_0.npy']
+COMPLEX_DATA = ['./complex_data_0.npy']
 
 EPOCHS = 30000
 BATCH_SIZE = 16
@@ -56,6 +56,7 @@ class GAN():
             print('Created new log directory.')
 
 
+        try:
             # Empty the generated image directory
             for the_file in os.listdir("./images"):
                 file_path = os.path.join("./images", the_file)
@@ -65,6 +66,8 @@ class GAN():
                     elif os.path.isdir(file_path): shutil.rmtree(file_path)
                 except Exception as e:
                     print(e)
+        except:
+            print("./images dir does not yet exist")
 
 
         # Load the dataset
@@ -84,40 +87,6 @@ class GAN():
             target_size = (max([x.shape[1] for x in self.X_train]), max([x.shape[0] for x in self.X_train]))
             #target_size = (self.X_train[0].shape[1], self.X_train[1].shape[0])
             self.img_shape = (target_size[1], target_size[0], self.channels)
-        # else:
-        #     # Load the dataset
-        #     filelist = glob.glob("./source_imgs/*.jpg")
-        #     imgs = [Image.open(fname) for fname in filelist]
-
-        #     self.target_size  = (max([x.size[0] for x in imgs]),
-        #                          max([x.size[1] for x in imgs]))
-
-        #     self.target_size = tuple([x//RESCALE_FACTOR for x in self.target_size])
-
-        #     self.X_train = []
-
-        #     for img in imgs:
-        #         old_size = img.size
-        #         ratio = min(self.target_size[0]/old_size[0],
-        #                     self.target_size[1]/old_size[1])
-
-        #         new_size = tuple([int(x*ratio) for x in old_size])
-        #         img = img.resize(new_size, Image.ANTIALIAS)
-        #         img = PIL.ImageOps.invert(img)
-        #         new_img = Image.new("L", self.target_size)
-        #         new_img.paste(img, ((self.target_size[0]-new_size[0])//2,
-        #                             (self.target_size[1]-new_size[1])//2))
-        #         self.X_train.append(new_img)
-
-        #     self.X_train = np.stack(self.X_train)
-
-        #     self.img_shape = (self.target_size[1],
-        #                       self.target_size[0],
-        #                       self.channels)
-
-        #     # Rescale -1 to 1
-        #     self.X_train = self.X_train / 127.5 - 1.
-        #     self.X_train = np.expand_dims(self.X_train, axis=3)
 
         if PREPARE_COLAB_DATA:
             np.save(NPY_SAVEFILE, self.X_train)
@@ -156,17 +125,17 @@ class GAN():
                        input_shape=(self.latent_dim,))(inp)
         layer1 = LeakyReLU()(layer1)
         layer1 = BatchNormalization(momentum=0.8)(layer1)
-        layer1 = Dropout(rate=0.5)(layer1)
+        layer1 = Dropout(rate=0.1)(layer1)
 
         layer2 = Dense(512)(layer1)
         layer2 = LeakyReLU()(layer2)
         layer2 = BatchNormalization(momentum=0.8)(layer2)
-        layer2 = Dropout(rate=0.5)(layer2)
+        layer2 = Dropout(rate=0.1)(layer2)
 
         layer3 = Dense(256)(layer2)
         layer3 = LeakyReLU()(layer3)
         layer3 = BatchNormalization(momentum=0.8)(layer3)
-        layer3 = Dropout(rate=0.5)(layer3)
+        layer3 = Dropout(rate=0.1)(layer3)
 
         # layer4 = Dense(16)(layer3)
         # layer4 = LeakyReLU()(layer4)
@@ -242,14 +211,13 @@ class GAN():
             # Select a random batch of images
             idx = np.random.randint(0, len(self.X_train), batch_size)
             imgs = self.X_train[idx]
-            print(self.X_train.shape)
 
             noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
 
-            if epoch == 0 or accuracy < 60:
+            if epoch == 0 or accuracy < 80:
                 # Train the discriminator
                 d_loss_real = self.discriminator.train_on_batch(imgs, valid)
                 d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
@@ -267,7 +235,7 @@ class GAN():
             # ---------------------
             noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
 
-            if epoch == 0 or accuracy > 40:
+            if epoch == 0 or accuracy > 20:
                 # Train the generator (to have the discriminator label samples as valid)
                 g_loss = self.combined.train_on_batch(noise, valid)
             else:
@@ -278,7 +246,7 @@ class GAN():
 
             # Plot the progress
             if RUN_ON_COLAB:
-                if (epoch % 200) == 0:
+                if (epoch % 50) == 0:
                     print(f"{epoch} [D loss: {d_loss[0]}, " +
                   f"acc.: {accuracy}%] [G loss: {g_loss}]")
             else:
