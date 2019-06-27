@@ -2,13 +2,8 @@ import numpy as np
 import numpy.matlib as matlib
 import cv2
 from os import listdir, mkdir
-from os.path import isfile, isdir, join, abspath
+from os.path import isfile, isdir, join
 from copy import deepcopy
-
-ROBINPATH = abspath("../ROBIN")
-COMPLEXPATH = abspath("../Dataset_complex")
-OUTPATH = abspath("./augmented")
-RESIZE_FACTOR = 32
 
 
 def padd_h(image, padding_height):
@@ -74,7 +69,7 @@ def rotate_image(img):
     return rotated
 
 
-def augment_images(images, filename, flip=True, saveiter=1000000,
+def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
                    saveaspng=False, resize_height=0, resize_width=0,
                    max_height=0, max_width=0):
     '''
@@ -118,7 +113,7 @@ def augment_images(images, filename, flip=True, saveiter=1000000,
         # save images to numpy array
         # Don't run this part, we want to save in 1 file
         if idx % saveiter == 0 and not saveaspng:
-            np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
+            np.save(join(outpath, '%s_%d' % (filename, saveidx)), final_images)
             saveidx += 1
             final_images = []
 
@@ -129,12 +124,12 @@ def augment_images(images, filename, flip=True, saveiter=1000000,
                 saveidx += 1
             final_images = []
 
-    np.save(join(OUTPATH, '%s_%d' % (filename, saveidx)), final_images)
+    np.save(join(outpath, '%s_%d' % (filename, saveidx)), final_images)
 
     print("augmented and saved all files")
 
 
-def get_max_dims(images):
+def get_max_dims(images, resize_factor):
     # Get size of largest image
     max_height = 0
     max_width = 0
@@ -146,8 +141,8 @@ def get_max_dims(images):
             max_height = height
         if width > max_width:
             max_width = width
-    resize_shape_height = max_height//RESIZE_FACTOR
-    resize_shape_width = max_width//RESIZE_FACTOR
+    resize_shape_height = max_height // resize_factor
+    resize_shape_width = max_width // resize_factor
 
     return (resize_shape_height, resize_shape_width, max_height, max_width)
 

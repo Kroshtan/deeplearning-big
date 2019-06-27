@@ -1,7 +1,7 @@
 from __future__ import print_function, division
+import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D
-from keras.layers import BatchNormalization
-from keras.layers import MaxPooling2D, Concatenate, LeakyReLU
+from keras.layers import MaxPooling2D, Concatenate, LeakyReLU, Conv2DTranspose
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
@@ -9,31 +9,45 @@ import matplotlib.pyplot as plt
 import os
 import shutil
 import numpy as np
+from os import mkdir
+from os.path import isdir, abspath
 
-PREPARE_COLAB_DATA = False
-RUN_ON_COLAB = True
+ROBINPATH = abspath("./ROBIN")
+COMPLEXPATH = abspath("./Dataset_complex")
+OUTPATH = abspath("./augmented")
+
+RESIZE_FACTOR = 32
+TRAIN_ON_ROBIN = True
+TRAIN_ON_COMPLEX = False
+
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
-TRAIN_ON_AUGMENTED = True
 SIMPLE_DATA = ['./augmented/robin_data_0.npy']
 COMPLEX_DATA = ['./augmented/complex_data_0.npy']
 
 EPOCHS = 30000
-BATCH_SIZE = 16
+BATCH_SIZE = 2
 SAMPLE_INTERVAL = 100
-RESCALE_FACTOR = 32
 
 
 class GAN():
     def __init__(self):
         self.channels = 1
-        self.latent_dim = 50
+        self.latent_dim = (10, 10)
 
         self.img_size = np.load(SIMPLE_DATA[0])[0].shape
         self.img_size += (1,)  # add color channel for conv layers
 
         optimizer = Adam(1e-3, decay=1e-4)
+
+        # Empty any old log directory
+        if os.path.exists(LOG_DIR):
+            shutil.rmtree(LOG_DIR)
+            print("Removed old log directory.")
+
+        os.mkdir(LOG_DIR)
+        print('Created new log directory.')
 
         # Empty any old image directory
         if os.path.exists(IMAGE_DIR):
@@ -43,28 +57,16 @@ class GAN():
         os.mkdir(IMAGE_DIR)
         print('Created new image directory.')
 
-        if not RUN_ON_COLAB:
-            # Empty any old log directory
-            if os.path.exists(LOG_DIR):
-                shutil.rmtree(LOG_DIR)
-                print("Removed old log directory.")
-
-            os.mkdir(LOG_DIR)
-            print('Created new log directory.')
-
-        try:
-            # Empty the generated image directory
-            for the_file in os.listdir("./images"):
-                file_path = os.path.join("./images", the_file)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                except Exception as e:
-                    print(e)
-        except FileExistsError:
-            print("./images dir does not yet exist")
+        # Empty the generated image directory
+        for the_file in os.listdir(IMAGE_DIR):
+            file_path = os.path.join(IMAGE_DIR, the_file)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(e)
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
@@ -76,7 +78,7 @@ class GAN():
         self.generator = self.build_generator()
 
         # The generator takes noise as input and generates imgs
-        z = Input(shape=(self.latent_dim,))
+        z = Input(shape=self.latent_dim)
         img = self.generator(z)
 
         # For the combined model we will only train the generator
@@ -92,22 +94,17 @@ class GAN():
 
     def build_generator(self):
 
-        inp = Input(shape=(self.latent_dim,))
+        inp = Input(shape=self.latent_dim)
 
-        layer1 = Dense(256,
-                       input_shape=(self.latent_dim,))(inp)
-        layer1 = LeakyReLU()(layer1)
-        layer1 = BatchNormalization(momentum=0.8)(layer1)
+        layer1 = Dense(units=np.prod(self.latent_dim))(inp)
 
-        layer2 = Dense(256)(layer1)
-        layer2 = LeakyReLU()(layer2)
-        layer2 = BatchNormalization(momentum=0.8)(layer2)
+        # layer1 = LeakyReLU()(layer1)
 
-        concat = Concatenate(axis=-1)([layer1, layer2])
+        layer1 = Reshape(target_shape=self.latent_dim)(layer1)
 
-        pre_out = Dense(np.prod(self.img_size), activation='tanh')(concat)
+        # layer1 = Conv2DTranspose(filters=10, kernel_size=4)(layer1)
 
-        out = Reshape(target_shape=self.img_size)(pre_out)
+        out = Reshape(target_shape=self.img_size)(layer1)
 
         model = Model(inputs=inp, outputs=out)
 
@@ -213,6 +210,8 @@ class GAN():
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
+                print(f"Accuracy: {accuracy:.2f}\tG-Loss: {g_loss}\t" +
+                      f"D-Loss: {d_loss[0]}")
                 self.sample_images(epoch)
 
         tensorboard.on_train_end()
@@ -245,5 +244,49 @@ class GAN():
 
 
 if __name__ == '__main__':
+    # Prepare data if not available
+    if not isdir(OUTPATH):
+        print(f"Creating new folder {OUTPATH}.")
+        mkdir(OUTPATH)
+    if not os.listdir(OUTPATH):
+
+        if TRAIN_ON_ROBIN:
+            files_robin = aug.loadAllFiles(ROBINPATH)
+            (height, width, max_height, max_width) = aug.get_max_dims(
+                images=files_robin,
+                resize_factor=RESIZE_FACTOR)
+
+        if TRAIN_ON_COMPLEX:
+            files_complex = aug.loadAllFiles(COMPLEXPATH)
+            (height, width, max_height, max_width) = aug.get_max_dims(
+                images=files_complex,
+                resize_factor=RESIZE_FACTOR)
+
+        if TRAIN_ON_ROBIN and TRAIN_ON_COMPLEX:
+            (height, width, max_height, max_width) = aug.get_max_dims(
+                images=files_robin + files_complex,
+                resize_factor=RESIZE_FACTOR)
+
+        if TRAIN_ON_ROBIN:
+            print(f"Preparing the ROBIN files...")
+            aug.augment_images(images=files_robin,
+                               outpath=OUTPATH,
+                               filename='robin_data',
+                               resize_height=height,
+                               resize_width=width,
+                               max_height=max_height,
+                               max_width=max_width)
+
+        if TRAIN_ON_COMPLEX:
+            print(f"Preparing the COMPLEX files...")
+            aug.augment_images(images=files_complex,
+                               outpath=OUTPATH,
+                               filename='complex_data',
+                               resize_height=height,
+                               resize_width=width,
+                               max_height=max_height,
+                               max_width=max_width)
+
+    # Train the GAN
     gan = GAN()
     gan.train(epochs=EPOCHS, sample_interval=SAMPLE_INTERVAL)
