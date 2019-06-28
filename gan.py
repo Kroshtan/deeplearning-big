@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 import augment as aug
-from keras.layers import Input, Dense, Reshape, Flatten, Conv2D
+from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, Concatenate, LeakyReLU, Conv2DTranspose
 from keras.models import Model
 from keras.optimizers import Adam
@@ -28,8 +28,8 @@ COMPLEX_DATA = ['./augmented/complex_data_0.npy']
 
 EPOCHS = 30000
 BATCH_SIZE = 2
-LEARNING_RATE = 1e-4
-DECAY = 1e-5
+LEARNING_RATE = 1e-5
+DECAY = 1e-7
 SAMPLE_INTERVAL = 100
 
 
@@ -111,10 +111,11 @@ class GAN():
                                        n_filt))(layer1)
 
         # layer1 = Conv2DTranspose(filters=n_filt, kernel_size=8, padding="same")(layer1)
-        # layer1 = Conv2DTranspose(filters=n_filt, kernel_size=6, padding="same")(layer1)
-        layer1 = Conv2DTranspose(filters=n_filt, kernel_size=3, padding="same")(layer1)
+        layer1 = Conv2DTranspose(filters=n_filt, kernel_size=6, padding="same")(layer1)
+        layer1 = Conv2DTranspose(filters=1, kernel_size=3, padding="same")(layer1)
 
         out = Reshape(target_shape=self.img_size)(layer1)
+        out = Activation('sigmoid')(layer1)
 
         model = Model(inputs=inp, outputs=out)
 
@@ -221,8 +222,10 @@ class GAN():
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                print(f"Accuracy: {accuracy:.2f}\tG-Loss: {g_loss}\t" +
-                      f"D-Loss: {d_loss[0]}")
+                print(f"@ {epoch:{len(str(EPOCHS))}}:\t"
+                      f"Accuracy: {int(accuracy):3}%\t"
+                      f"G-Loss: {g_loss:6.3f}\t"
+                      f"D-Loss: {d_loss[0]:6.3f}")
                 self.sample_images(epoch)
 
         tensorboard.on_train_end()
@@ -236,8 +239,6 @@ class GAN():
         # Rescale images from [-1, 1] to [1, 0] (invert)
         real_imgs = self.X_train[np.random.choice(
             self.X_train.shape[0]), :, :, 0]
-        # gen_imgs = -0.5 * gen_imgs - 0.5
-        # real_imgs = -0.5 * real_imgs - 0.5
 
         fig, axs = plt.subplots(r)
 
