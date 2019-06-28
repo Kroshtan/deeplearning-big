@@ -28,6 +28,8 @@ COMPLEX_DATA = ['./augmented/complex_data_0.npy']
 
 EPOCHS = 30000
 BATCH_SIZE = 2
+LEARNING_RATE = 1e-4
+DECAY = 1e-5
 SAMPLE_INTERVAL = 100
 
 
@@ -39,7 +41,7 @@ class GAN():
         self.img_size = np.load(SIMPLE_DATA[0])[0].shape
         self.img_size += (1,)  # add color channel for conv layers
 
-        optimizer = Adam(1e-3, decay=1e-4)
+        optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
         # Empty any old log directory
         if os.path.exists(LOG_DIR):
@@ -94,15 +96,23 @@ class GAN():
 
     def build_generator(self):
 
+        n_filt = 5
+
         inp = Input(shape=self.latent_dim)
 
-        layer1 = Dense(units=np.prod(self.latent_dim))(inp)
+        layer1 = Flatten()(inp)
+
+        layer1 = Dense(units=n_filt * np.prod(self.img_size))(layer1)
 
         # layer1 = LeakyReLU()(layer1)
 
-        layer1 = Reshape(target_shape=self.latent_dim)(layer1)
+        layer1 = Reshape(target_shape=(self.img_size[0],
+                                       self.img_size[1],
+                                       n_filt))(layer1)
 
-        # layer1 = Conv2DTranspose(filters=10, kernel_size=4)(layer1)
+        # layer1 = Conv2DTranspose(filters=n_filt, kernel_size=8, padding="same")(layer1)
+        # layer1 = Conv2DTranspose(filters=n_filt, kernel_size=6, padding="same")(layer1)
+        layer1 = Conv2DTranspose(filters=n_filt, kernel_size=3, padding="same")(layer1)
 
         out = Reshape(target_shape=self.img_size)(layer1)
 
@@ -120,6 +130,7 @@ class GAN():
                        kernel_size=(3, 3),
                        activation='relu',
                        padding='same')(inp)
+
         conv1 = MaxPooling2D(pool_size=(4, 4))(conv1)
         flat_conv1 = Flatten()(conv1)
         flat_conv1 = Dense(56, activation='relu')(flat_conv1)
@@ -170,7 +181,7 @@ class GAN():
             self.X_train = np.expand_dims(self.X_train, axis=3)
             self.X_train = self.X_train / (255/2) - 1
 
-            noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
+            noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -193,7 +204,7 @@ class GAN():
             # ---------------------
             #  Train Generator
             # ---------------------
-            noise = np.random.normal(-1, 1, (batch_size, self.latent_dim))
+            noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
 
             if epoch == 0 or accuracy > 20:
                 # Train the generator (to have the discriminator label samples
@@ -220,7 +231,7 @@ class GAN():
 
     def sample_images(self, epoch):
         r = 3
-        noise = np.random.normal(-1, 1, (r, self.latent_dim))
+        noise = np.random.normal(-1, 1, ((r,) + self.latent_dim))
         gen_imgs = self.generator.predict(noise)
         # Rescale images from [-1, 1] to [1, 0] (invert)
         real_imgs = self.X_train[np.random.choice(
