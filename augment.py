@@ -91,6 +91,7 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
                                                       max_height,
                                                       max_width)
         original_img = cv2.resize(original_img, (resize_width, resize_height))
+        print(f"OR: {original_img.shape}")
 
         final_images.append(deepcopy(original_img))
 
@@ -98,15 +99,24 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
         img = deepcopy(original_img)
         final_images.append(np.flip(img, 0))
         rot_img = rotate_image(img)
+        rot_img = scale_and_padd_to_biggest_file(rot_img,
+                                                 max_height,
+                                                 max_width)
+        rot_img = cv2.resize(rot_img, (resize_width, resize_height))
+        print(f"ROT: {rot_img.shape}")
         final_images.append(rot_img)
         final_images.append(np.flip(rot_img, 1))
-
         # mirror and rotate
         if flip:
             img = np.flip(original_img, 1)
             final_images.append(deepcopy(img))
             final_images.append(np.flip(img, 0))
             rot_img = rotate_image(img)
+
+            rot_img = scale_and_padd_to_biggest_file(rot_img,
+                                                     max_height,
+                                                     max_width)
+            rot_img = cv2.resize(rot_img, (resize_width, resize_height))
             final_images.append(rot_img)
             final_images.append(np.flip(rot_img, 1))
 

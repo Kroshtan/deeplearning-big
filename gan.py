@@ -23,10 +23,8 @@ TRAIN_ON_COMPLEX = False
 NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
-SIMPLE_DATA = ['./augmented/robin_data_0.npy']
-COMPLEX_DATA = ['./augmented/complex_data_0.npy']
 
-EPOCHS = 30000
+EPOCHS = 200000
 BATCH_SIZE = 2
 LEARNING_RATE = 1e-5
 DECAY = 1e-7
@@ -35,10 +33,9 @@ SAMPLE_INTERVAL = 100
 
 class GAN():
     def __init__(self):
-        self.channels = 1
         self.latent_dim = (10, 10)
-
-        self.img_size = np.load(SIMPLE_DATA[0])[0].shape
+        random_file = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+        self.img_size = np.load(random_file, allow_pickle=True)[0].shape
         self.img_size += (1,)  # add color channel for conv layers
 
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
@@ -96,23 +93,29 @@ class GAN():
 
     def build_generator(self):
 
-        n_filt = 5
+        n_filts = (256, 128, 64)
+        kernel_sizes = (12, 8, 6)
 
         inp = Input(shape=self.latent_dim)
 
         layer1 = Flatten()(inp)
 
-        layer1 = Dense(units=n_filt * np.prod(self.img_size))(layer1)
+        layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
 
         # layer1 = LeakyReLU()(layer1)
 
         layer1 = Reshape(target_shape=(self.img_size[0],
                                        self.img_size[1],
-                                       n_filt))(layer1)
+                                       n_filts[0]))(layer1)
 
-        # layer1 = Conv2DTranspose(filters=n_filt, kernel_size=8, padding="same")(layer1)
-        layer1 = Conv2DTranspose(filters=n_filt, kernel_size=6, padding="same")(layer1)
-        layer1 = Conv2DTranspose(filters=1, kernel_size=3, padding="same")(layer1)
+        for i in range(min(len(n_filts), len(kernel_sizes))):
+            layer1 = Conv2DTranspose(filters=n_filts[i],
+                                     kernel_size=kernel_sizes[i],
+                                     padding="same")(layer1)
+
+        layer1 = Conv2DTranspose(filters=1,
+                                 kernel_size=3,
+                                 padding="same")(layer1)
 
         out = Reshape(target_shape=self.img_size)(layer1)
         out = Activation('sigmoid')(layer1)
@@ -166,10 +169,11 @@ class GAN():
             #  Train Discriminator
             # ---------------------
 
-            # Select a random batch of images
-            this_npy_num_imgs = np.load(SIMPLE_DATA[0],
-                                        allow_pickle=True)
+            # Detect batch size in npys
+            this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+            this_npy_num_imgs = np.load(this_npy_num_imgs, allow_pickle=True)
             this_npy_num_imgs = this_npy_num_imgs.shape[0]
+
             batch_size = min(this_npy_num_imgs, batch_size)
 
             # Adversarial ground truths
@@ -178,8 +182,13 @@ class GAN():
 
             idx = np.random.randint(0, this_npy_num_imgs-1, batch_size)
 
-            self.X_train = np.load(SIMPLE_DATA[0], allow_pickle=True)[idx]
+            # Select a random batch of images
+            self.X_train = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+
+            self.X_train = np.load(self.X_train, allow_pickle=True)[idx]
+
             self.X_train = np.expand_dims(self.X_train, axis=3)
+
             self.X_train = self.X_train / (255/2) - 1
 
             noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
@@ -287,7 +296,8 @@ if __name__ == '__main__':
                                resize_height=height,
                                resize_width=width,
                                max_height=max_height,
-                               max_width=max_width)
+                               max_width=max_width,
+                               saveiter=BATCH_SIZE)
 
         if TRAIN_ON_COMPLEX:
             print(f"Preparing the COMPLEX files...")
@@ -297,7 +307,8 @@ if __name__ == '__main__':
                                resize_height=height,
                                resize_width=width,
                                max_height=max_height,
-                               max_width=max_width)
+                               max_width=max_width,
+                               saveiter=BATCH_SIZE)
 
     # Train the GAN
     gan = GAN()
