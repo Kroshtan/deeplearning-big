@@ -4,6 +4,7 @@ import cv2
 from os import listdir, mkdir
 from os.path import isfile, isdir, join
 from copy import deepcopy
+from tqdm import tqdm
 
 
 def padd_h(image, padding_height):
@@ -70,8 +71,7 @@ def rotate_image(img):
 
 
 def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
-                   saveaspng=False, resize_height=0, resize_width=0,
-                   max_height=0, max_width=0):
+                   resize_height=0, resize_width=0, max_height=0, max_width=0):
     '''
     Flip should be set to false for the advanced dataset
     saveiter is the iteration at which the images get saved (and the ram freed)
@@ -82,7 +82,7 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
     final_images = []
     saveidx = 0
 
-    for idx, imgpath in enumerate(images):
+    for idx, imgpath in tqdm(enumerate(images)):
         original_img = cv2.imread(imgpath)
 
         # set to one channel
@@ -91,7 +91,6 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
                                                       max_height,
                                                       max_width)
         original_img = cv2.resize(original_img, (resize_width, resize_height))
-        print(f"OR: {original_img.shape}")
 
         final_images.append(deepcopy(original_img))
 
@@ -103,9 +102,10 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
                                                  max_height,
                                                  max_width)
         rot_img = cv2.resize(rot_img, (resize_width, resize_height))
-        print(f"ROT: {rot_img.shape}")
+
         final_images.append(rot_img)
         final_images.append(np.flip(rot_img, 1))
+
         # mirror and rotate
         if flip:
             img = np.flip(original_img, 1)
@@ -121,22 +121,17 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
             final_images.append(np.flip(rot_img, 1))
 
         # save images to numpy array
-        # Don't run this part, we want to save in 1 file
-        if idx % saveiter == 0 and not saveaspng:
+        if idx % saveiter == 0:
             np.save(join(outpath, '%s_%d' % (filename, saveidx)), final_images)
             saveidx += 1
             final_images = []
 
-        # save all images individually
-        if saveaspng:
-            for img in final_images:
-                cv2.imwrite('filename_%d.png' % (saveidx), img)
-                saveidx += 1
-            final_images = []
+    # for i in final_images:
+    #     print(i.shape)
 
-    np.save(join(outpath, '%s_%d' % (filename, saveidx)), final_images)
+    # np.save(join(outpath, '%s_%d' % (filename, saveidx)), final_images)
 
-    print("augmented and saved all files")
+    # print("augmented and saved all files")
 
 
 def get_max_dims(images, resize_factor):

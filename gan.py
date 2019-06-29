@@ -16,7 +16,7 @@ ROBINPATH = abspath("./ROBIN")
 COMPLEXPATH = abspath("./Dataset_complex")
 OUTPATH = abspath("./augmented")
 
-RESIZE_FACTOR = 32
+RESIZE_FACTOR = 24
 TRAIN_ON_ROBIN = True
 TRAIN_ON_COMPLEX = False
 
@@ -25,10 +25,10 @@ IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
 
 EPOCHS = 200000
-BATCH_SIZE = 2
+BATCH_SIZE = 5
 LEARNING_RATE = 1e-5
 DECAY = 1e-7
-SAMPLE_INTERVAL = 100
+SAMPLE_INTERVAL = 10
 
 
 class GAN():
@@ -93,16 +93,14 @@ class GAN():
 
     def build_generator(self):
 
-        n_filts = (256, 128, 64)
-        kernel_sizes = (12, 8, 6)
+        n_filts = (128, 64)
+        kernel_sizes = (8, 6)
 
         inp = Input(shape=self.latent_dim)
 
         layer1 = Flatten()(inp)
 
         layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
-
-        # layer1 = LeakyReLU()(layer1)
 
         layer1 = Reshape(target_shape=(self.img_size[0],
                                        self.img_size[1],
@@ -118,11 +116,11 @@ class GAN():
                                  padding="same")(layer1)
 
         out = Reshape(target_shape=self.img_size)(layer1)
-        out = Activation('sigmoid')(layer1)
+        out = Activation('tanh')(layer1)
 
         model = Model(inputs=inp, outputs=out)
 
-        model.summary()
+        # model.summary()
 
         return model
 
@@ -130,30 +128,19 @@ class GAN():
 
         inp = Input(shape=self.img_size)
 
-        conv1 = Conv2D(filters=4,
-                       kernel_size=(3, 3),
-                       activation='relu',
-                       padding='same')(inp)
+        layer1 = Conv2D(filters=16,
+                        kernel_size=5,
+                        activation='relu',
+                        padding='same')(inp)
 
-        conv1 = MaxPooling2D(pool_size=(4, 4))(conv1)
-        flat_conv1 = Flatten()(conv1)
-        flat_conv1 = Dense(56, activation='relu')(flat_conv1)
+        layer1 = Flatten()(layer1)
 
-        conv2 = Conv2D(filters=4,
-                       kernel_size=(5, 5),
-                       activation='relu',
-                       padding='same')(conv1)
-        # conv2 = MaxPooling2D(pool_size=(2, 2))(conv2)
-        flat_conv2 = Flatten()(conv2)
-        flat_conv2 = Dense(56, activation='relu')(flat_conv2)
+        layer1 = Dense(units=128, activation='relu')(layer1)
 
-        fc = Concatenate()([flat_conv1, flat_conv2])
-
-        fc = Dense(128, activation='relu')(fc)
-
-        out = Dense(1, activation='sigmoid')(fc)
+        out = Dense(units=1, activation='sigmoid')(layer1)
 
         model = Model(inputs=inp, outputs=out)
+
         model.summary()
 
         return model
@@ -176,22 +163,20 @@ class GAN():
 
             batch_size = min(this_npy_num_imgs, batch_size)
 
-            # Adversarial ground truths
-            valid = np.ones((batch_size, 1))
-            fake = np.zeros((batch_size, 1))
-
             idx = np.random.randint(0, this_npy_num_imgs-1, batch_size)
 
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-
-            self.X_train = np.load(self.X_train, allow_pickle=True)[idx]
-
+            self.X_train = np.load(self.X_train, allow_pickle=True)
+            self.X_train = self.X_train[idx]
             self.X_train = np.expand_dims(self.X_train, axis=3)
-
             self.X_train = self.X_train / (255/2) - 1
 
             noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
+
+            # Adversarial ground truths
+            valid = np.ones(self.X_train.shape)
+            fake = np.zeros(self.X_train.shape)
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -245,7 +230,7 @@ class GAN():
         r = 3
         noise = np.random.normal(-1, 1, ((r,) + self.latent_dim))
         gen_imgs = self.generator.predict(noise)
-        # Rescale images from [-1, 1] to [1, 0] (invert)
+
         real_imgs = self.X_train[np.random.choice(
             self.X_train.shape[0]), :, :, 0]
 
