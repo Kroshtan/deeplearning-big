@@ -2,6 +2,7 @@ from __future__ import print_function, division
 import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, Concatenate, LeakyReLU, Conv2DTranspose
+from keras.layers import Dropout
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
@@ -16,7 +17,7 @@ ROBINPATH = abspath("./ROBIN")
 COMPLEXPATH = abspath("./Dataset_complex")
 OUTPATH = abspath("./augmented")
 
-RESIZE_FACTOR = 24
+RESIZE_FACTOR = 32
 TRAIN_ON_ROBIN = True
 TRAIN_ON_COMPLEX = False
 
@@ -24,16 +25,16 @@ NPY_SAVEFILE = 'traindata.npy'
 IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
 
-EPOCHS = 200000
-BATCH_SIZE = 5
+EPOCHS = 1000000
+BATCH_SIZE = 1
 LEARNING_RATE = 1e-5
-DECAY = 1e-7
-SAMPLE_INTERVAL = 10
+DECAY = 0
+SAMPLE_INTERVAL = 50
 
 
 class GAN():
     def __init__(self):
-        self.latent_dim = (10, 10)
+        self.latent_dim = (5, 5)
         random_file = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
         self.img_size = np.load(random_file, allow_pickle=True)[0].shape
         self.img_size += (1,)  # add color channel for conv layers
@@ -69,6 +70,7 @@ class GAN():
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
+        self.discriminator.summary()
         self.discriminator.compile(loss='binary_crossentropy',
                                    optimizer=optimizer,
                                    metrics=['accuracy'])
@@ -93,14 +95,15 @@ class GAN():
 
     def build_generator(self):
 
-        n_filts = (128, 64)
-        kernel_sizes = (8, 6)
+        n_filts = (32, 16)
+        kernel_sizes = (8, 4)
 
         inp = Input(shape=self.latent_dim)
 
         layer1 = Flatten()(inp)
 
         layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
+        layer1 = Dropout(rate=0.1)(layer1)
 
         layer1 = Reshape(target_shape=(self.img_size[0],
                                        self.img_size[1],
@@ -126,20 +129,18 @@ class GAN():
 
     def build_discriminator(self):
 
-        inp = Input(shape=self.img_size)
+        d_in = Input(shape=self.img_size)
 
-        layer1 = Conv2D(filters=16,
-                        kernel_size=5,
-                        activation='relu',
-                        padding='same')(inp)
+        d = Conv2D(filters=12,
+                   kernel_size=10,
+                   activation='relu',
+                   padding='same')(d_in)
 
-        layer1 = Flatten()(layer1)
+        d = Dense(units=512, activation='relu')(d)
 
-        layer1 = Dense(units=128, activation='relu')(layer1)
+        d = Dense(units=1, activation='tanh')(d)
 
-        out = Dense(units=1, activation='sigmoid')(layer1)
-
-        model = Model(inputs=inp, outputs=out)
+        model = Model(inputs=d_in, outputs=d)
 
         model.summary()
 
@@ -186,13 +187,13 @@ class GAN():
                 d_loss_real = self.discriminator.train_on_batch(self.X_train,
                                                                 valid)
                 d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
             else:
                 # Test the discriminator
                 d_loss_real = self.discriminator.test_on_batch(self.X_train,
                                                                valid)
                 d_loss_fake = self.discriminator.test_on_batch(gen_imgs, fake)
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
             accuracy = 100*d_loss[1]
 
@@ -212,17 +213,19 @@ class GAN():
 
             tensorboard.on_epoch_end(epoch, {'generator loss': g_loss,
                                              'discriminator loss': d_loss[0],
-                                             'Accuracy': accuracy})
+                                             'Accuracy': accuracy,
+                                             'Comb. loss': g_loss + d_loss[0]})
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
                 print(f"@ {epoch:{len(str(EPOCHS))}}:\t"
                       f"Accuracy: {int(accuracy):3}%\t"
                       f"G-Loss: {g_loss:6.3f}\t"
-                      f"D-Loss: {d_loss[0]:6.3f}")
+                      f"D-Loss: {d_loss[0]:6.3f}\t"
+                      f"Combined: {g_loss+d_loss[0]:6.3f}")
                 self.sample_images(epoch)
 
-        tensorboard.on_train_end()
+        tensorboard.on_train_end(tensorboard)
         self.discriminator.save('discriminator.h5')
         self.generator.save('generator.h5')
 
