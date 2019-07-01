@@ -6,6 +6,11 @@ from os.path import isfile, isdir, join
 from copy import deepcopy
 from tqdm import tqdm
 
+ROBINPATH = '../ROBIN'
+COMPLEXPATH = '../Dataset_complex'
+OUTPATH = 'augmented'
+RESIZE_FACTOR = 32
+BATCH_SIZE = 1
 
 def padd_h(image, padding_height):
     m = np.array([255], dtype=np.uint8)
@@ -157,26 +162,31 @@ if __name__ == '__main__':
     files_robin = loadAllFiles(ROBINPATH)
     files_complex = loadAllFiles(COMPLEXPATH)
     (height, width, max_height, max_width) = get_max_dims(
-        files_robin + files_complex)
+        files_robin + files_complex, resize_factor=RESIZE_FACTOR)
 
     if not isdir(OUTPATH):
         mkdir(OUTPATH)
 
-    augment_images(files_robin,
-                   'robin_data',
+
+    augment_images(images=files_robin,
+                   outpath=OUTPATH,
+                   filename='robin_data',
                    resize_height=height,
                    resize_width=width,
                    max_height=max_height,
-                   max_width=max_width)
+                   max_width=max_width,
+                   saveiter=BATCH_SIZE)
 
     print("Done with ROBIN")
 
-    augment_images(files_complex,
-                   'complex_data',
+    augment_images(images = files_complex,
+                   outpath = OUTPATH,
+                   filename = 'complex_data',
                    resize_height=height,
                    resize_width=width,
                    max_height=max_height,
-                   max_width=max_width)
+                   max_width=max_width, 
+                   saveiter=BATCH_SIZE)
 
     print("Done with Complex")
 
