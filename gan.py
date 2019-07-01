@@ -39,6 +39,11 @@ class GAN():
         self.img_size = np.load(random_file, allow_pickle=True)[0].shape
         self.img_size += (1,)  # add color channel for conv layers
 
+        self.this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+        self.this_npy_num_imgs = np.load(self.this_npy_num_imgs,
+                                         allow_pickle=True)
+        self.this_npy_num_imgs = self.this_npy_num_imgs.shape[0]
+
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
         # Empty any old log directory
@@ -158,16 +163,13 @@ class GAN():
             # ---------------------
 
             # Detect batch size in npys
-            this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-            this_npy_num_imgs = np.load(this_npy_num_imgs, allow_pickle=True)
-            this_npy_num_imgs = this_npy_num_imgs.shape[0]
 
-            batch_size = min(this_npy_num_imgs, batch_size)
+            batch_size = min(self.this_npy_num_imgs, batch_size)
 
-            idx = np.random.randint(0, this_npy_num_imgs-1, batch_size)
+            idx = np.random.randint(0, self.this_npy_num_imgs-1, batch_size)
 
             # Select a random batch of images
-            self.X_train = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+            self.X_train = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
             self.X_train = np.load(self.X_train, allow_pickle=True)
             self.X_train = self.X_train[idx]
             self.X_train = np.expand_dims(self.X_train, axis=3)
@@ -234,8 +236,10 @@ class GAN():
         noise = np.random.normal(-1, 1, ((r,) + self.latent_dim))
         gen_imgs = self.generator.predict(noise)
 
-        real_imgs = self.X_train[np.random.choice(
-            self.X_train.shape[0]), :, :, 0]
+        # Select a random image
+        real_imgs = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
+        real_imgs = np.load(real_imgs, allow_pickle=True)
+        real_imgs = real_imgs[np.random.randint(0, BATCH_SIZE*8), :, :]
 
         fig, axs = plt.subplots(r)
 
