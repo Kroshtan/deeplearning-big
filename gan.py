@@ -3,7 +3,7 @@ import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, Concatenate, LeakyReLU, Conv2DTranspose
 from keras.layers import Dropout
-from keras.models import Model
+from keras.models import Model, Sequential
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
 import matplotlib.pyplot as plt
@@ -28,7 +28,10 @@ LOG_DIR = './logs'
 EPOCHS = 1000000
 BATCH_SIZE = 1
 LEARNING_RATE = 1e-5
-DECAY = 0
+DECAY = 1e-6
+P_FLIP_LABEL = 0
+LRELU_FACTOR = 0.1
+DROPOUT_RATE = 0.2
 SAMPLE_INTERVAL = 50
 
 
@@ -105,47 +108,47 @@ class GAN():
 
         inp = Input(shape=self.latent_dim)
 
-        layer1 = Flatten()(inp)
+        g = Flatten()(inp)
 
-        layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
-        layer1 = Dropout(rate=0.1)(layer1)
+        g = Dense(units=n_filts[0] * np.prod(self.img_size))(g)
+        g = LeakyReLU(alpha=LRELU_FACTOR)(g)
+        g = Dropout(rate=DROPOUT_RATE)(g)
 
-        layer1 = Reshape(target_shape=(self.img_size[0],
-                                       self.img_size[1],
-                                       n_filts[0]))(layer1)
+        g = Reshape(target_shape=(self.img_size[0],
+                                  self.img_size[1],
+                                  n_filts[0]))(g)
 
         for i in range(min(len(n_filts), len(kernel_sizes))):
-            layer1 = Conv2DTranspose(filters=n_filts[i],
-                                     kernel_size=kernel_sizes[i],
-                                     padding="same")(layer1)
+            g = Conv2DTranspose(filters=n_filts[i],
+                                kernel_size=kernel_sizes[i],
+                                padding="same")(g)
+            g = Dropout(rate=DROPOUT_RATE)(g)
+            g = LeakyReLU(alpha=LRELU_FACTOR)(g)
 
-        layer1 = Conv2DTranspose(filters=1,
-                                 kernel_size=3,
-                                 padding="same")(layer1)
-
-        out = Reshape(target_shape=self.img_size)(layer1)
-        out = Activation('tanh')(layer1)
+        g = Conv2DTranspose(filters=1,
+                            kernel_size=3,
+                            padding="same")(g)
+        out = Activation('tanh')(g)
 
         model = Model(inputs=inp, outputs=out)
 
-        # model.summary()
+        model.summary()
 
         return model
 
     def build_discriminator(self):
 
-        d_in = Input(shape=self.img_size)
+        model = Sequential()
 
-        d = Conv2D(filters=12,
-                   kernel_size=10,
-                   activation='relu',
-                   padding='same')(d_in)
+        model.add(Conv2D(filters=1,
+                         kernel_size=4,
+                         padding='same',
+                         input_shape=self.img_size))
+        model.add(MaxPooling2D(pool_size=2))
 
-        d = Dense(units=512, activation='relu')(d)
-
-        d = Dense(units=1, activation='tanh')(d)
-
-        model = Model(inputs=d_in, outputs=d)
+        model.add(Flatten())
+        model.add(Dense(units=512))
+        model.add(Dense(units=1))
 
         model.summary()
 
@@ -169,17 +172,22 @@ class GAN():
             idx = np.random.randint(0, self.this_npy_num_imgs-1, batch_size)
 
             # Select a random batch of images
-            self.X_train = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
+            self.X_train = os.path.join(OUTPATH,
+                                        np.random.choice(os.listdir(OUTPATH)))
             self.X_train = np.load(self.X_train, allow_pickle=True)
             self.X_train = self.X_train[idx]
             self.X_train = np.expand_dims(self.X_train, axis=3)
-            self.X_train = self.X_train / (255/2) - 1
+            self.X_train = self.X_train / (-255/2) + 1
 
             noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
 
             # Adversarial ground truths
-            valid = np.ones(self.X_train.shape)
-            fake = np.zeros(self.X_train.shape)
+            if np.random.rand() < P_FLIP_LABEL:
+                valid = np.zeros(self.X_train.shape)
+                fake = np.ones(self.X_train.shape)
+            else:
+                valid = np.ones(self.X_train.shape)
+                fake = np.zeros(self.X_train.shape)
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -233,13 +241,14 @@ class GAN():
 
     def sample_images(self, epoch):
         r = 3
-        noise = np.random.normal(-1, 1, ((r,) + self.latent_dim))
+        noise = np.random.normal(-1, 1, ((r-1,) + self.latent_dim))
         gen_imgs = self.generator.predict(noise)
 
         # Select a random image
         real_imgs = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
         real_imgs = np.load(real_imgs, allow_pickle=True)
         real_imgs = real_imgs[np.random.randint(0, BATCH_SIZE*8), :, :]
+        real_imgs = real_imgs / (-255/1)
 
         fig, axs = plt.subplots(r)
 
