@@ -153,6 +153,10 @@ def get_max_dims(images, resize_factor):
             max_width = width
     resize_shape_height = max_height // resize_factor
     resize_shape_width = max_width // resize_factor
+    while resize_shape_height % 32 != 0:
+        resize_shape_height += 1
+    while resize_shape_width % 32 != 0:
+        resize_shape_width += 1
 
     return (resize_shape_height, resize_shape_width, max_height, max_width)
 
@@ -185,7 +189,7 @@ if __name__ == '__main__':
                    resize_height=height,
                    resize_width=width,
                    max_height=max_height,
-                   max_width=max_width, 
+                   max_width=max_width,
                    saveiter=BATCH_SIZE)
 
     print("Done with Complex")

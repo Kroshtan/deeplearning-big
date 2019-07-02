@@ -2,7 +2,7 @@ from __future__ import print_function, division
 import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, LeakyReLU, Conv2DTranspose, Dropout
-from keras.layers import concatenate
+from keras.layers import concatenate, UpSampling2D
 from keras.models import Model, Sequential
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
@@ -27,21 +27,21 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 1
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 DECAY = 1e-9
 P_FLIP_LABEL = 0
 LRELU_FACTOR = 0
 ADD_LABEL_NOISE = False
 LABEL_NOISE = 0.3
 DROPOUT_RATE = 0.5
-SAMPLE_INTERVAL = 10
+SAMPLE_INTERVAL = 100
 
 
 class GAN():
     def __init__(self):
-        self.latent_dim = (5, 5)
         random_file = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
         self.img_size = np.load(random_file, allow_pickle=True)[0].shape
+        self.latent_dim = self.img_size
         self.img_size += (1,)  # add color channel for conv layers
 
         self.this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
@@ -104,31 +104,41 @@ class GAN():
 
     def build_generator(self):
 
-        n_filts = (32, 16)
-        kernel_sizes = (9, 5)
-
         inp = Input(shape=self.latent_dim)
+        inp_resh = Reshape(self.latent_dim + (1,))(inp)
 
-        layer1 = Flatten()(inp)
+        n_filt = [8, 16, 32, 64]
+        kernel_size = [3, 5, 5, 5]
+        pool_size = [2, 2, 4, 2]
 
-        layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
-        layer1 = Dropout(rate=DROPOUT_RATE)(layer1)
+        blocks = []
+        for block in range(len(n_filt)):
 
-        layer1 = Reshape(target_shape=(self.img_size[0],
-                                       self.img_size[1],
-                                       n_filts[0]))(layer1)
+            g = inp_resh
 
-        for i in range(min(len(n_filts), len(kernel_sizes))):
-            layer1 = Conv2DTranspose(filters=n_filts[i],
-                                     kernel_size=kernel_sizes[i],
-                                     padding="same")(layer1)
+            for _ in range(block):
+                g = MaxPooling2D(pool_size=pool_size[block])(g)
 
-        layer1 = Conv2DTranspose(filters=1,
-                                 kernel_size=3,
-                                 padding="same")(layer1)
+            g = Conv2D(filters=n_filt[block],
+                       kernel_size=kernel_size[block],
+                       padding="valid")(g)
+            g = Conv2DTranspose(filters=n_filt[block],
+                                kernel_size=kernel_size[block],
+                                padding="valid")(g)
 
-        out = Reshape(target_shape=self.img_size)(layer1)
-        out = Activation('tanh')(layer1)
+            for _ in range(block):
+                g = UpSampling2D(size=pool_size[block])(g)
+
+            blocks.append(g)
+
+        g = concatenate(blocks)
+
+        g = Conv2DTranspose(filters=1,
+                            kernel_size=1,
+                            padding="valid")(g)
+
+        g = Reshape(target_shape=self.img_size)(g)
+        out = Activation('tanh')(g)
 
         model = Model(inputs=inp, outputs=out)
 
@@ -140,12 +150,12 @@ class GAN():
 
         d_in = Input(shape=self.img_size)
 
-        d = Conv2D(filters=8,
+        d = Conv2D(filters=32,
                    kernel_size=3,
                    padding='valid')(d_in)
 
         d = MaxPooling2D(pool_size=2)(d)
-        d = Conv2D(filters=8,
+        d = Conv2D(filters=16,
                    kernel_size=5,
                    padding='valid')(d)
 
@@ -165,7 +175,6 @@ class GAN():
         d = Dense(units=1)(d)
 
         return Model(inputs=d_in, outputs=d)
-
 
     def train(self, epochs, batch_size=BATCH_SIZE, sample_interval=50):
 
