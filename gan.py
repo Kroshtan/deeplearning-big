@@ -2,6 +2,7 @@ from __future__ import print_function, division
 import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, LeakyReLU, Conv2DTranspose, Dropout
+from keras.layers import concatenate
 from keras.models import Model, Sequential
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
@@ -28,11 +29,12 @@ EPOCHS = 1000000
 BATCH_SIZE = 1
 LEARNING_RATE = 1e-5
 DECAY = 1e-9
-P_FLIP_LABEL = 0.05
-LRELU_FACTOR = 0.1
-LABEL_NOISE = (0, 0)
-DROPOUT_RATE = 0.1
-SAMPLE_INTERVAL = 50
+P_FLIP_LABEL = 0
+LRELU_FACTOR = 0
+ADD_LABEL_NOISE = False
+LABEL_NOISE = 0.3
+DROPOUT_RATE = 0.5
+SAMPLE_INTERVAL = 10
 
 
 class GAN():
@@ -102,60 +104,68 @@ class GAN():
 
     def build_generator(self):
 
-        model = Sequential()
+        n_filts = (32, 16)
+        kernel_sizes = (9, 5)
 
-        n_filt = 12
+        inp = Input(shape=self.latent_dim)
 
-        model.add(Reshape((np.prod(self.latent_dim),), input_shape=self.latent_dim))
+        layer1 = Flatten()(inp)
 
-        model.add(Dense(units=128))
-        model.add(Dense(units=np.prod(self.latent_dim)))
+        layer1 = Dense(units=n_filts[0] * np.prod(self.img_size))(layer1)
+        layer1 = Dropout(rate=DROPOUT_RATE)(layer1)
 
-        model.add(Reshape((self.latent_dim + (1,))))
+        layer1 = Reshape(target_shape=(self.img_size[0],
+                                       self.img_size[1],
+                                       n_filts[0]))(layer1)
 
-        model.add(Conv2D(filters=n_filt,
-                         kernel_size=5,
-                         padding="same"))
+        for i in range(min(len(n_filts), len(kernel_sizes))):
+            layer1 = Conv2DTranspose(filters=n_filts[i],
+                                     kernel_size=kernel_sizes[i],
+                                     padding="same")(layer1)
 
-        model.add(Conv2DTranspose(filters=n_filt,
-                                  kernel_size=(3, 7),
-                                  strides=3,
-                                  padding='valid'))
-        model.add(Dropout(rate=DROPOUT_RATE))
-        model.add(LeakyReLU(alpha=LRELU_FACTOR))
+        layer1 = Conv2DTranspose(filters=1,
+                                 kernel_size=3,
+                                 padding="same")(layer1)
 
-        model.add(Conv2DTranspose(filters=1,
-                                  kernel_size=(5, 6),
-                                  strides=5,
-                                  padding='valid'))
+        out = Reshape(target_shape=self.img_size)(layer1)
+        out = Activation('tanh')(layer1)
 
-        model.add(Activation('tanh'))
+        model = Model(inputs=inp, outputs=out)
+
+        # model.summary()
 
         return model
 
     def build_discriminator(self):
 
-        model = Sequential()
+        d_in = Input(shape=self.img_size)
 
-        model.add(Conv2D(filters=8,
-                         kernel_size=3,
-                         padding='same',
-                         input_shape=self.img_size))
-        model.add(MaxPooling2D(pool_size=2))
+        d = Conv2D(filters=8,
+                   kernel_size=3,
+                   padding='valid')(d_in)
 
-        model.add(Flatten())
-        model.add(Dropout(rate=DROPOUT_RATE))
-        model.add(LeakyReLU(alpha=LRELU_FACTOR))
+        d = MaxPooling2D(pool_size=2)(d)
+        d = Conv2D(filters=8,
+                   kernel_size=5,
+                   padding='valid')(d)
 
-        model.add(Dense(units=64))
-        model.add(Dropout(rate=DROPOUT_RATE))
-        model.add(LeakyReLU(alpha=LRELU_FACTOR))
+        d = MaxPooling2D(pool_size=2)(d)
+        d = Conv2D(filters=16,
+                   kernel_size=3,
+                   padding='valid')(d)
 
-        model.add(Dense(units=1))
+        d = Flatten()(d)
 
-        model.summary()
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        d = Dense(units=16)(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
-        return model
+        d = Dense(units=1)(d)
+
+        return Model(inputs=d_in, outputs=d)
+
 
     def train(self, epochs, batch_size=BATCH_SIZE, sample_interval=50):
 
@@ -186,19 +196,22 @@ class GAN():
 
             # Adversarial ground truths
             if np.random.rand() < P_FLIP_LABEL:
-                valid = np.zeros((BATCH_SIZE,)) + np.random.uniform(
-                    high=LABEL_NOISE[1],
-                    size=(BATCH_SIZE,))
-                fake = np.ones((BATCH_SIZE,)) - np.random.uniform(
-                    high=LABEL_NOISE[1],
-                    size=(BATCH_SIZE,))
+                fake = np.ones((BATCH_SIZE,))
+                if ADD_LABEL_NOISE:
+                    fake -= np.random.uniform(high=LABEL_NOISE,
+                                              size=(BATCH_SIZE,))
+                if ADD_LABEL_NOISE:
+                    fake -= np.random.uniform(high=LABEL_NOISE,
+                                              size=(BATCH_SIZE,))
             else:
-                valid = np.ones((BATCH_SIZE,)) - np.random.uniform(
-                    high=LABEL_NOISE[1],
-                    size=(BATCH_SIZE,))
-                fake = np.zeros((BATCH_SIZE,)) + np.random.uniform(
-                    high=LABEL_NOISE[1],
-                    size=(BATCH_SIZE,))
+                valid = np.ones((BATCH_SIZE,))
+                if ADD_LABEL_NOISE:
+                    valid -= np.random.uniform(high=LABEL_NOISE,
+                                               size=(BATCH_SIZE,))
+                fake = np.zeros((BATCH_SIZE,))
+                if ADD_LABEL_NOISE:
+                    fake += np.random.uniform(high=LABEL_NOISE,
+                                              size=(BATCH_SIZE,))
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -223,7 +236,7 @@ class GAN():
             # ---------------------
             noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
 
-            if epoch == 0 or accuracy > 20:
+            if epoch == 0 or accuracy > 52:
                 # Train the generator (to have the discriminator label samples
                 # as valid)
                 g_loss = self.combined.train_on_batch(noise, valid)
@@ -244,26 +257,26 @@ class GAN():
                       f"G-Loss: {g_loss:6.3f}\t"
                       f"D-Loss: {d_loss[0]:6.3f}\t"
                       f"Combined: {g_loss+d_loss[0]:6.3f}")
-                self.sample_images(epoch, accuracy)
+                self.sample_images(epoch, accuracy, real_imgs=self.X_train)
 
         tensorboard.on_train_end(tensorboard)
         self.discriminator.save('discriminator.h5')
         self.generator.save('generator.h5')
 
-    def sample_images(self, epoch, accuracy):
+    def sample_images(self, epoch, accuracy, real_imgs):
         r = 2
         noise = np.random.normal(-1, 1, ((r-1,) + self.latent_dim))
         gen_imgs = self.generator.predict(noise)
 
         # Select a random image
-        real_imgs = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
-        real_imgs = np.load(real_imgs, allow_pickle=True)
-        real_imgs = real_imgs[np.random.randint(0, BATCH_SIZE*8), :, :]
-        real_imgs = real_imgs / (-255/1)
+        # real_imgs = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
+        # real_imgs = np.load(real_imgs, allow_pickle=True)
+        # real_imgs = real_imgs / (255/1)
+        # real_imgs = real_imgs[np.random.randint(0, BATCH_SIZE*8), :, :]
+        real_imgs = real_imgs[0, :, :, 0]
 
         fig, axs = plt.subplots(r)
         fig.suptitle(f"Epoch {epoch}\nAccuracy {int(accuracy)}%")
-
 
         axs[0].imshow(real_imgs, cmap='gray')
         axs[0].axis('off')
