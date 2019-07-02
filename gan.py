@@ -111,23 +111,21 @@ class GAN():
         kernel_size = [3, 5, 5, 5]
         pool_size = [2, 2, 4, 2]
 
+        numlayers = len(n_filt)
+
         blocks = []
-        for block in range(len(n_filt)):
+        for block in range(numlayers):
 
             g = inp_resh
-
-            for _ in range(block):
-                g = MaxPooling2D(pool_size=pool_size[block])(g)
-
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
                        padding="valid")(g)
+            # g = MaxPooling2D(pool_size=pool_size[block])(g)
             g = Conv2DTranspose(filters=n_filt[block],
                                 kernel_size=kernel_size[block],
                                 padding="valid")(g)
 
-            for _ in range(block):
-                g = UpSampling2D(size=pool_size[block])(g)
+            # g = UpSampling2D(size=pool_size[block])(g)
 
             blocks.append(g)
 
