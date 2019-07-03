@@ -28,7 +28,7 @@ LOG_DIR = './logs'
 EPOCHS = 1000000
 BATCH_SIZE = 1
 LEARNING_RATE = 1e-5
-DECAY = 0
+DECAY = 1e-8
 P_FLIP_LABEL = 0.05
 LRELU_FACTOR = 0.2
 ADD_LABEL_NOISE = False  # Tends to set accuracy to 0, preventing training. Why??
@@ -36,12 +36,15 @@ LABEL_NOISE = 0.01
 DROPOUT_RATE = 0.05
 SAMPLE_INTERVAL = 50
 
+temp_first_pool = 8
+
 
 class GAN():
     def __init__(self):
         random_file = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
         self.img_size = np.load(random_file, allow_pickle=True)[0].shape
-        self.latent_dim = self.img_size
+        self.latent_dim = (self.img_size[0]//temp_first_pool,
+                           self.img_size[1]//temp_first_pool)
         self.img_size += (1,)  # add color channel for conv layers
 
         self.this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
@@ -109,34 +112,17 @@ class GAN():
 
         n_filt = [32, 32, 32, 16]
         kernel_size = [3, 5, 5, 5]
-        pool_size = [8, 4, 2, 1]
+        pool_size = [temp_first_pool, 4, 2, 1]
 
         numlayers = len(n_filt)
 
         blocks = []
-        # for block in range(numlayers):
-
-        #     g = inp_resh
-        #     g = AveragePooling2D(pool_size=pool_size[block])(g)
-
-        #     g = Conv2D(filters=n_filt[block],
-        #                kernel_size=kernel_size[block],
-        #                padding="valid")(g)
-
-        #     g = Conv2DTranspose(filters=n_filt[block],
-        #                         kernel_size=kernel_size[block],
-        #                         padding="valid")(g)
-
-        #     g = UpSampling2D(size=pool_size[block])(g)
-
-        #     blocks.append(g)
-
-        # g = concatenate(blocks)
 
         g = inp_resh
         for block in range(numlayers):
 
-            g = MaxPooling2D(pool_size=pool_size[block])(g)
+            if block:
+                g = MaxPooling2D(pool_size=pool_size[block])(g)
 
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
@@ -147,7 +133,6 @@ class GAN():
                                 padding="valid")(g)
 
             g = UpSampling2D(size=pool_size[block])(g)
-
 
         g = Conv2DTranspose(filters=1,
                             kernel_size=1,
@@ -171,7 +156,7 @@ class GAN():
         # pooling_size = [1, 2]
 
         d = Conv2D(filters=8,
-                   kernel_size=5,
+                   kernel_size=11,
                    padding='same')(d_in)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
