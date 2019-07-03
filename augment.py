@@ -12,6 +12,7 @@ OUTPATH = 'augmented'
 RESIZE_FACTOR = 32
 BATCH_SIZE = 1
 
+
 def padd_h(image, padding_height):
     m = np.array([255], dtype=np.uint8)
     (_, maxx) = image.shape
@@ -34,21 +35,23 @@ def padd_v(image, padding_width):
     return np.concatenate((padding_left, image, padding_right), axis=1)
 
 
-def padd_to_biggest_file(image, maxh, maxw):
+def padd_to_biggest_file(image, img_size):
     (maxy, maxx) = image.shape
+    (maxh, maxw) = img_size
     img = padd_h(image, maxh - maxy)
     return padd_v(img, maxw - maxx)
 
 
-def scale_and_padd_to_biggest_file(image, maxh, maxw):
+def scale_and_padd_to_biggest_file(image, img_size):
     # todo implement scaling
     (maxy, maxx) = image.shape
+    (maxh, maxw) = img_size
     # take smallest scale to not go out of bounds
     scale = maxw / maxx if maxh / maxy > maxw / maxx else maxh / maxy
 
     image = cv2.resize(image, (int(maxx * scale), int(maxy * scale)))
 
-    return padd_to_biggest_file(image, maxh, maxw)
+    return padd_to_biggest_file(image, img_size)
 
 
 def loadAllFiles(path):
@@ -75,8 +78,8 @@ def rotate_image(img):
     return rotated
 
 
-def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
-                   resize_height=0, resize_width=0, max_height=0, max_width=0):
+def augment_images(images, outpath, filename, img_size, flip=True,
+                   saveiter=1000000):
     '''
     Flip should be set to false for the advanced dataset
     saveiter is the iteration at which the images get saved (and the ram freed)
@@ -92,10 +95,8 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
 
         # set to one channel
         original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
-        original_img = scale_and_padd_to_biggest_file(original_img,
-                                                      max_height,
-                                                      max_width)
-        original_img = cv2.resize(original_img, (resize_width, resize_height))
+        original_img = scale_and_padd_to_biggest_file(original_img, img_size)
+        original_img = cv2.resize(original_img, img_size)
 
         final_images.append(deepcopy(original_img))
 
@@ -103,10 +104,8 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
         img = deepcopy(original_img)
         final_images.append(np.flip(img, 0))
         rot_img = rotate_image(img)
-        rot_img = scale_and_padd_to_biggest_file(rot_img,
-                                                 max_height,
-                                                 max_width)
-        rot_img = cv2.resize(rot_img, (resize_width, resize_height))
+        rot_img = scale_and_padd_to_biggest_file(rot_img, img_size)
+        rot_img = cv2.resize(rot_img, img_size)
 
         final_images.append(rot_img)
         final_images.append(np.flip(rot_img, 1))
@@ -118,10 +117,8 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
             final_images.append(np.flip(img, 0))
             rot_img = rotate_image(img)
 
-            rot_img = scale_and_padd_to_biggest_file(rot_img,
-                                                     max_height,
-                                                     max_width)
-            rot_img = cv2.resize(rot_img, (resize_width, resize_height))
+            rot_img = scale_and_padd_to_biggest_file(rot_img, img_size)
+            rot_img = cv2.resize(rot_img, img_size)
             final_images.append(rot_img)
             final_images.append(np.flip(rot_img, 1))
 
@@ -139,59 +136,23 @@ def augment_images(images, outpath, filename, flip=True, saveiter=1000000,
     # print("augmented and saved all files")
 
 
-def get_max_dims(images, resize_factor):
-    # Get size of largest image
-    max_height = 0
-    max_width = 0
+# def get_max_dims(images, resize_factor):
+#     # Get size of largest image
+#     max_height = 0
+#     max_width = 0
 
-    for idx, imgpath in enumerate(images):
-        original_img = cv2.imread(imgpath)
-        (height, width, _) = original_img.shape
-        if height > max_height:
-            max_height = height
-        if width > max_width:
-            max_width = width
-    resize_shape_height = max_height // resize_factor
-    resize_shape_width = max_width // resize_factor
-    while resize_shape_height % 32 != 0:
-        resize_shape_height += 1
-    while resize_shape_width % 32 != 0:
-        resize_shape_width += 1
+#     for idx, imgpath in enumerate(images):
+#         original_img = cv2.imread(imgpath)
+#         (height, width, _) = original_img.shape
+#         if height > max_height:
+#             max_height = height
+#         if width > max_width:
+#             max_width = width
+#     resize_shape_height = max_height // resize_factor
+#     resize_shape_width = max_width // resize_factor
+#     while resize_shape_height % 32 != 0:
+#         resize_shape_height += 1
+#     while resize_shape_width % 32 != 0:
+#         resize_shape_width += 1
 
-    return (resize_shape_height, resize_shape_width, max_height, max_width)
-
-
-if __name__ == '__main__':
-
-    files_robin = loadAllFiles(ROBINPATH)
-    files_complex = loadAllFiles(COMPLEXPATH)
-    (height, width, max_height, max_width) = get_max_dims(
-        files_robin + files_complex, resize_factor=RESIZE_FACTOR)
-
-    if not isdir(OUTPATH):
-        mkdir(OUTPATH)
-
-
-    augment_images(images=files_robin,
-                   outpath=OUTPATH,
-                   filename='robin_data',
-                   resize_height=height,
-                   resize_width=width,
-                   max_height=max_height,
-                   max_width=max_width,
-                   saveiter=BATCH_SIZE)
-
-    print("Done with ROBIN")
-
-    augment_images(images = files_complex,
-                   outpath = OUTPATH,
-                   filename = 'complex_data',
-                   resize_height=height,
-                   resize_width=width,
-                   max_height=max_height,
-                   max_width=max_width,
-                   saveiter=BATCH_SIZE)
-
-    print("Done with Complex")
-
-    print("FINISHED")
+#     return (resize_shape_height, resize_shape_width, max_height, max_width)

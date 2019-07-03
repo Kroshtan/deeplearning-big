@@ -18,7 +18,10 @@ ROBINPATH = abspath("../ROBIN")
 COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
-RESIZE_FACTOR = 26
+# RESIZE_FACTOR = 24
+IMG_SIZE = (256, 256, 1)
+LATENT_SIZE = (16, 16)
+ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
 TRAIN_ON_ROBIN = True
 TRAIN_ON_COMPLEX = False
 
@@ -37,21 +40,12 @@ LABEL_NOISE = 0.01
 DROPOUT_RATE = 0.05
 SAMPLE_INTERVAL = 50
 
-temp_first_pool = 8
-
 
 class GAN():
     def __init__(self):
-        random_file = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-        self.img_size = np.load(random_file, allow_pickle=True)[0].shape
-        self.latent_dim = (self.img_size[0]//temp_first_pool,
-                           self.img_size[1]//temp_first_pool)
-        self.img_size += (1,)  # add color channel for conv layers
-
-        self.this_npy_num_imgs = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-        self.this_npy_num_imgs = np.load(self.this_npy_num_imgs,
-                                         allow_pickle=True)
-        self.this_npy_num_imgs = self.this_npy_num_imgs.shape[0]
+        self.img_per_npy = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+        self.img_per_npy = np.load(self.img_per_npy, allow_pickle=True)
+        self.img_per_npy = self.img_per_npy.shape[0]
 
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
@@ -92,7 +86,7 @@ class GAN():
         self.generator = self.build_generator()
 
         # The generator takes noise as input and generates imgs
-        z = Input(shape=self.latent_dim)
+        z = Input(shape=LATENT_SIZE)
         img = self.generator(z)
 
         # For the combined model we will only train the generator
@@ -112,14 +106,12 @@ class GAN():
 
     def build_generator(self):
 
-        inp = Input(shape=self.latent_dim)
+        inp = Input(shape=LATENT_SIZE)
+        inp_resh = Reshape(LATENT_SIZE + (1,))(inp)
 
-        inp_resh = Reshape(self.latent_dim + (1,))(inp)
-        print(inp_resh.shape)
-
-        n_filt = [32, 32, 32, 16]
-        kernel_size = [3, 5, 5, 5]
-        pool_size = [temp_first_pool, 4, 2, 1]
+        n_filt = [256, 128, 64, 32]
+        kernel_size = [5, 5, 5, 5]
+        pool_size = [ratio, 4, 2, 1]
 
         numlayers = len(n_filt)
 
@@ -145,7 +137,7 @@ class GAN():
                             kernel_size=1,
                             padding="valid")(g)
 
-        g = Reshape(target_shape=self.img_size)(g)
+        g = Reshape(target_shape=IMG_SIZE)(g)
         out = Activation('tanh')(g)
 
         model = Model(inputs=inp, outputs=out)
@@ -156,7 +148,7 @@ class GAN():
 
     def build_discriminator(self):
 
-        d_in = Input(shape=self.img_size)
+        d_in = Input(shape=IMG_SIZE)
 
         # n_filt = [64, 12]
         # kernel_size = [3, 3]
@@ -168,19 +160,19 @@ class GAN():
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
-        d = MaxPooling2D(pool_size=4)(d)
+        d = MaxPooling2D(pool_size=2)(d)
 
-        d = Conv2D(filters=32,
+        d = Conv2D(filters=64,
                    kernel_size=5,
-                   padding='same')(d)
+                   padding='valid')(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
         d = MaxPooling2D(pool_size=2)(d)
 
-        d = Conv2D(filters=32,
+        d = Conv2D(filters=128,
                    kernel_size=5,
-                   padding='same')(d)
+                   padding='valid')(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
@@ -188,7 +180,7 @@ class GAN():
 
         d = Conv2D(filters=64,
                    kernel_size=5,
-                   padding='same')(d)
+                   padding='valid')(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
@@ -219,9 +211,9 @@ class GAN():
 
             # Detect batch size in npys
 
-            batch_size = min(self.this_npy_num_imgs, batch_size)
+            batch_size = min(self.img_per_npy, batch_size)
 
-            idx = np.random.randint(0, self.this_npy_num_imgs-1, batch_size)
+            idx = np.random.randint(0, self.img_per_npy-1, batch_size)
 
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
@@ -231,27 +223,27 @@ class GAN():
             self.X_train = np.expand_dims(self.X_train, axis=3)
             self.X_train = self.X_train / (-255/2) + 1
 
-            noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
+            noise = np.random.normal(-1, 1, ((batch_size,) + LATENT_SIZE))
 
             # Adversarial ground truths
             if np.random.rand() < P_FLIP_LABEL:
-                fake = np.ones((BATCH_SIZE,))
+                fake = np.ones((batch_size,))
                 if ADD_LABEL_NOISE:
                     fake -= np.random.uniform(high=LABEL_NOISE,
-                                              size=(BATCH_SIZE,))
-                valid = np.zeros((BATCH_SIZE,))
+                                              size=(batch_size,))
+                valid = np.zeros((batch_size,))
                 if ADD_LABEL_NOISE:
                     valid += np.random.uniform(high=LABEL_NOISE,
-                                               size=(BATCH_SIZE,))
+                                               size=(batch_size,))
             else:
-                valid = np.ones((BATCH_SIZE,))
+                valid = np.ones((batch_size,))
                 if ADD_LABEL_NOISE:
                     valid -= np.random.uniform(high=LABEL_NOISE,
-                                               size=(BATCH_SIZE,))
-                fake = np.zeros((BATCH_SIZE,))
+                                               size=(batch_size,))
+                fake = np.zeros((batch_size,))
                 if ADD_LABEL_NOISE:
                     fake += np.random.uniform(high=LABEL_NOISE,
-                                              size=(BATCH_SIZE,))
+                                              size=(batch_size,))
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -274,7 +266,7 @@ class GAN():
             # ---------------------
             #  Train Generator
             # ---------------------
-            noise = np.random.normal(-1, 1, ((batch_size,) + self.latent_dim))
+            noise = np.random.normal(-1, 1, ((batch_size,) + LATENT_SIZE))
 
             if epoch == 0 or accuracy > 52:
                 # Train the generator (to have the discriminator label samples
@@ -305,7 +297,7 @@ class GAN():
 
     def sample_images(self, epoch, accuracy, real_imgs):
         r = 2
-        noise = np.random.normal(-1, 1, ((r-1,) + self.latent_dim))
+        noise = np.random.normal(-1, 1, ((r-1,) + LATENT_SIZE))
         gen_imgs = self.generator.predict(noise)
 
         # Select a random image
@@ -336,30 +328,17 @@ if __name__ == '__main__':
 
         if TRAIN_ON_ROBIN:
             files_robin = aug.loadAllFiles(ROBINPATH)
-            (height, width, max_height, max_width) = aug.get_max_dims(
-                images=files_robin,
-                resize_factor=RESIZE_FACTOR)
 
         if TRAIN_ON_COMPLEX:
             files_complex = aug.loadAllFiles(COMPLEXPATH)
-            (height, width, max_height, max_width) = aug.get_max_dims(
-                images=files_complex,
-                resize_factor=RESIZE_FACTOR)
 
-        if TRAIN_ON_ROBIN and TRAIN_ON_COMPLEX:
-            (height, width, max_height, max_width) = aug.get_max_dims(
-                images=files_robin + files_complex,
-                resize_factor=RESIZE_FACTOR)
 
         if TRAIN_ON_ROBIN:
             print(f"Preparing the ROBIN files...")
             aug.augment_images(images=files_robin,
                                outpath=OUTPATH,
                                filename='robin_data',
-                               resize_height=height,
-                               resize_width=width,
-                               max_height=max_height,
-                               max_width=max_width,
+                               img_size=IMG_SIZE[:2],
                                saveiter=BATCH_SIZE)
 
         if TRAIN_ON_COMPLEX:
@@ -367,10 +346,7 @@ if __name__ == '__main__':
             aug.augment_images(images=files_complex,
                                outpath=OUTPATH,
                                filename='complex_data',
-                               resize_height=height,
-                               resize_width=width,
-                               max_height=max_height,
-                               max_width=max_width,
+                               img_size=IMG_SIZE[:2],
                                saveiter=BATCH_SIZE)
 
     # Train the GAN
