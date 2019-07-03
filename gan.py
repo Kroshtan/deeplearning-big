@@ -38,6 +38,7 @@ DROPOUT_RATE = 0.05
 SAMPLE_INTERVAL = 50
 
 temp_first_pool = 8
+SAVE_INTERVAL = 200
 
 
 class GAN():
@@ -299,10 +300,11 @@ class GAN():
                       f"D-Loss: {d_loss[0]:6.3f}\t"
                       f"Combined: {g_loss+d_loss[0]:6.3f}")
                 self.sample_images(epoch, accuracy, real_imgs=self.X_train)
+            if epoch % SAVE_INTERVAL == 0:
+                self.discriminator.save('discriminator.h5')
+                self.generator.save('generator.h5')
 
         tensorboard.on_train_end(tensorboard)
-        self.discriminator.save('discriminator.h5')
-        self.generator.save('generator.h5')
 
     def sample_images(self, epoch, accuracy, real_imgs):
         r = 2
