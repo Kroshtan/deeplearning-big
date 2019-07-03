@@ -156,7 +156,7 @@ class GAN():
         # pooling_size = [1, 2]
 
         d = Conv2D(filters=8,
-                   kernel_size=11,
+                   kernel_size=5,
                    padding='same')(d_in)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
