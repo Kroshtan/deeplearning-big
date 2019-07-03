@@ -30,9 +30,14 @@ IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
 
 EPOCHS = 1000000
+<<<<<<< HEAD
 BATCH_SIZE = 16
 # Times 8, since every image will result in 8 augmented images.
 SAVE_N_AUG_IMAGES_PER_NPY = 4
+=======
+BATCH_SIZE = 8
+SAVE_N_AUG_IMAGES_PER_NPY = 1 # Times 8, since every image will result in 8 augmented images. 
+>>>>>>> 50413442d52f52c8243d08fe37574043fc0dc27c
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
@@ -326,7 +331,7 @@ if __name__ == '__main__':
             aug.augment_images(images=files_robin,
                                outpath=OUTPATH,
                                filename='robin_data',
-                               img_size=IMG_SIZE[:2],
+                               img_size=(IMG_SIZE[1], IMG_SIZE[0]),
                                saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
         if TRAIN_ON_COMPLEX:
@@ -334,7 +339,7 @@ if __name__ == '__main__':
             aug.augment_images(images=files_complex,
                                outpath=OUTPATH,
                                filename='complex_data',
-                               img_size=IMG_SIZE[:2],
+                               img_size=(IMG_SIZE[1], IMG_SIZE[0]),
                                saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
     # Train the GAN
