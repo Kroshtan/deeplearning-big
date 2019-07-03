@@ -31,12 +31,13 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 16
-SAVE_N_AUG_IMAGES_PER_NPY = 4  # Times 8, since every image will result in 8 augmented images.
+# Times 8, since every image will result in 8 augmented images.
+SAVE_N_AUG_IMAGES_PER_NPY = 4
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
 LRELU_FACTOR = 0.2
-ADD_LABEL_NOISE = False  # Tends to set accuracy to 0, preventing training. Why??
+ADD_LABEL_NOISE = False
 LABEL_NOISE = 0.01
 DROPOUT_RATE = 0.1
 SAMPLE_INTERVAL = 20
@@ -106,7 +107,7 @@ class GAN():
         inp_resh = Reshape(LATENT_SIZE + (1,))(inp)
 
         n_filt = [128, 64, 32, 8]
-        kernel_size = [9, 9, 9, 9]
+        kernel_size = [8, 8, 8, 8]
         pool_size = [ratio, 4, 2, 2]
 
         numlayers = len(n_filt)
@@ -118,17 +119,11 @@ class GAN():
                        kernel_size=kernel_size[block],
                        padding="same",
                        strides=(1 if not block else pool_size[block]))(g)
-            # g = Dropout(rate=DROPOUT_RATE)(g)
 
             g = Conv2DTranspose(filters=1,
                                 kernel_size=kernel_size[block],
                                 padding="same",
                                 strides=pool_size[block])(g)
-            # g = Dropout(rate=DROPOUT_RATE)(g)
-
-        # g = Conv2DTranspose(filters=1,
-        #                     kernel_size=1,
-        #                     padding="valid")(g)
 
         out = Activation('tanh')(g)
 
@@ -144,34 +139,34 @@ class GAN():
 
         d = Conv2D(filters=8,
                    kernel_size=4,
-                   padding='valid',
+                   padding='same',
                    strides=1)(d_in)
 
         r1 = MaxPooling2D(pool_size=3)(d)
 
         d = Conv2D(filters=16,
                    kernel_size=8,
-                   padding='valid',
+                   padding='same',
                    strides=2)(d)
 
         r2 = MaxPooling2D(pool_size=3)(d)
 
         d = Conv2D(filters=16,
                    kernel_size=8,
-                   padding='valid',
+                   padding='same',
                    strides=2)(d)
         r3 = MaxPooling2D(pool_size=3)(d)
 
         d = Conv2D(filters=48,
                    kernel_size=8,
-                   padding='valid',
+                   padding='same',
                    strides=2)(d)
 
         r4 = MaxPooling2D(pool_size=3)(d)
 
         d = Conv2D(filters=128,
                    kernel_size=8,
-                   padding='valid',
+                   padding='same',
                    strides=2)(d)
 
         d = Flatten()(d)
@@ -207,9 +202,7 @@ class GAN():
             # ---------------------
 
             # Detect batch size in npys
-
             batch_size = min(self.img_per_npy, batch_size)
-
 
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
