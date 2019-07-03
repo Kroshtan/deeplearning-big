@@ -2,7 +2,7 @@ from __future__ import print_function, division
 import augment as aug
 from keras.layers import Input, Dense, Reshape, Flatten, Conv2D, Activation
 from keras.layers import MaxPooling2D, LeakyReLU, Conv2DTranspose, Dropout
-from keras.layers import concatenate, UpSampling2D
+from keras.layers import concatenate, UpSampling2D, AveragePooling2D
 from keras.models import Model, Sequential
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
@@ -17,7 +17,7 @@ ROBINPATH = abspath("./ROBIN")
 COMPLEXPATH = abspath("./Dataset_complex")
 OUTPATH = abspath("./augmented")
 
-RESIZE_FACTOR = 32
+RESIZE_FACTOR = 26
 TRAIN_ON_ROBIN = True
 TRAIN_ON_COMPLEX = False
 
@@ -27,14 +27,14 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 1
-LEARNING_RATE = 1e-4
-DECAY = 1e-9
-P_FLIP_LABEL = 0
-LRELU_FACTOR = 0
-ADD_LABEL_NOISE = False
-LABEL_NOISE = 0.3
-DROPOUT_RATE = 0.5
-SAMPLE_INTERVAL = 100
+LEARNING_RATE = 1e-5
+DECAY = 0
+P_FLIP_LABEL = 0.05
+LRELU_FACTOR = 0.2
+ADD_LABEL_NOISE = False  # Tends to set accuracy to 0, preventing training. Why??
+LABEL_NOISE = 0.01
+DROPOUT_RATE = 0.05
+SAMPLE_INTERVAL = 50
 
 
 class GAN():
@@ -107,29 +107,47 @@ class GAN():
         inp = Input(shape=self.latent_dim)
         inp_resh = Reshape(self.latent_dim + (1,))(inp)
 
-        n_filt = [8, 16, 32, 64]
+        n_filt = [32, 32, 32, 16]
         kernel_size = [3, 5, 5, 5]
-        pool_size = [2, 2, 4, 2]
+        pool_size = [8, 4, 2, 1]
 
         numlayers = len(n_filt)
 
         blocks = []
+        # for block in range(numlayers):
+
+        #     g = inp_resh
+        #     g = AveragePooling2D(pool_size=pool_size[block])(g)
+
+        #     g = Conv2D(filters=n_filt[block],
+        #                kernel_size=kernel_size[block],
+        #                padding="valid")(g)
+
+        #     g = Conv2DTranspose(filters=n_filt[block],
+        #                         kernel_size=kernel_size[block],
+        #                         padding="valid")(g)
+
+        #     g = UpSampling2D(size=pool_size[block])(g)
+
+        #     blocks.append(g)
+
+        # g = concatenate(blocks)
+
+        g = inp_resh
         for block in range(numlayers):
 
-            g = inp_resh
+            g = MaxPooling2D(pool_size=pool_size[block])(g)
+
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
                        padding="valid")(g)
-            # g = MaxPooling2D(pool_size=pool_size[block])(g)
+
             g = Conv2DTranspose(filters=n_filt[block],
                                 kernel_size=kernel_size[block],
                                 padding="valid")(g)
 
-            # g = UpSampling2D(size=pool_size[block])(g)
+            g = UpSampling2D(size=pool_size[block])(g)
 
-            blocks.append(g)
-
-        g = concatenate(blocks)
 
         g = Conv2DTranspose(filters=1,
                             kernel_size=1,
@@ -140,7 +158,7 @@ class GAN():
 
         model = Model(inputs=inp, outputs=out)
 
-        # model.summary()
+        model.summary()
 
         return model
 
@@ -148,31 +166,52 @@ class GAN():
 
         d_in = Input(shape=self.img_size)
 
-        d = Conv2D(filters=32,
-                   kernel_size=3,
-                   padding='valid')(d_in)
+        # n_filt = [64, 12]
+        # kernel_size = [3, 3]
+        # pooling_size = [1, 2]
 
-        d = MaxPooling2D(pool_size=2)(d)
+        d = Conv2D(filters=8,
+                   kernel_size=5,
+                   padding='same')(d_in)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+
+        d = MaxPooling2D(pool_size=4)(d)
+
         d = Conv2D(filters=16,
                    kernel_size=5,
-                   padding='valid')(d)
+                   padding='same')(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
         d = MaxPooling2D(pool_size=2)(d)
-        d = Conv2D(filters=16,
-                   kernel_size=3,
-                   padding='valid')(d)
+
+        d = Conv2D(filters=32,
+                   kernel_size=5,
+                   padding='same')(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+
+        d = MaxPooling2D(pool_size=2)(d)
+
+        d = Conv2D(filters=32,
+                   kernel_size=5,
+                   padding='same')(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
         d = Flatten()(d)
 
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
-        d = Dense(units=16)(d)
+        d = Dense(units=64)(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
         d = Dense(units=1)(d)
 
-        return Model(inputs=d_in, outputs=d)
+        d = Model(inputs=d_in, outputs=d)
+        d.summary()
+
+        return d
 
     def train(self, epochs, batch_size=BATCH_SIZE, sample_interval=50):
 
@@ -207,9 +246,10 @@ class GAN():
                 if ADD_LABEL_NOISE:
                     fake -= np.random.uniform(high=LABEL_NOISE,
                                               size=(BATCH_SIZE,))
+                valid = np.zeros((BATCH_SIZE,))
                 if ADD_LABEL_NOISE:
-                    fake -= np.random.uniform(high=LABEL_NOISE,
-                                              size=(BATCH_SIZE,))
+                    valid += np.random.uniform(high=LABEL_NOISE,
+                                               size=(BATCH_SIZE,))
             else:
                 valid = np.ones((BATCH_SIZE,))
                 if ADD_LABEL_NOISE:
@@ -276,10 +316,6 @@ class GAN():
         gen_imgs = self.generator.predict(noise)
 
         # Select a random image
-        # real_imgs = os.path.join(OUTPATH, np.random.choice(os.listdir(OUTPATH)))
-        # real_imgs = np.load(real_imgs, allow_pickle=True)
-        # real_imgs = real_imgs / (255/1)
-        # real_imgs = real_imgs[np.random.randint(0, BATCH_SIZE*8), :, :]
         real_imgs = real_imgs[0, :, :, 0]
 
         fig, axs = plt.subplots(r)
