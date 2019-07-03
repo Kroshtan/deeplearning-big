@@ -19,7 +19,7 @@ COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 # RESIZE_FACTOR = 24
-IMG_SIZE = (96, 128, 1)
+IMG_SIZE = (128, 128, 1)
 LATENT_SIZE = (16, 16)
 ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
 TRAIN_ON_ROBIN = True
@@ -38,15 +38,12 @@ P_FLIP_LABEL = 0.05
 LRELU_FACTOR = 0.2
 ADD_LABEL_NOISE = False  # Tends to set accuracy to 0, preventing training. Why??
 LABEL_NOISE = 0.01
-DROPOUT_RATE = 0.05
-SAMPLE_INTERVAL = 50
+DROPOUT_RATE = 0.1
+SAMPLE_INTERVAL = 20
 
 
 class GAN():
     def __init__(self):
-        # self.img_per_npy = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-        # self.img_per_npy = np.load(self.img_per_npy, allow_pickle=True)
-        # self.img_per_npy = self.img_per_npy.shape[0]
         self.img_per_npy = SAVE_N_AUG_IMAGES_PER_NPY*8
 
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
@@ -102,48 +99,41 @@ class GAN():
         self.combined = Model(z, validity)
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
         print("Saving model layout image...")
-        #plot_model(self.generator, to_file='generator_model.png', show_shapes=True, show_layer_names=False)
-        #plot_model(self.discriminator, to_file='discriminator_model.png', show_shapes=True, show_layer_names=False)
-        #plot_model(self.combined, to_file='combined_model.png', show_shapes=True, show_layer_names=False)
 
     def build_generator(self):
 
         inp = Input(shape=LATENT_SIZE)
         inp_resh = Reshape(LATENT_SIZE + (1,))(inp)
 
-        n_filt = [256, 128, 64, 32]
-        kernel_size = [5, 5, 5, 5]
-        pool_size = [ratio, 4, 2, 1]
+        n_filt = [128, 64, 32, 8]
+        kernel_size = [9, 9, 9, 9]
+        pool_size = [ratio, 4, 2, 2]
 
         numlayers = len(n_filt)
-
-        blocks = []
 
         g = inp_resh
         for block in range(numlayers):
 
-            if block:
-                g = MaxPooling2D(pool_size=pool_size[block])(g)
-
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
-                       padding="valid")(g)
+                       padding="same",
+                       strides=(1 if not block else pool_size[block]))(g)
+            # g = Dropout(rate=DROPOUT_RATE)(g)
 
-            g = Conv2DTranspose(filters=n_filt[block],
+            g = Conv2DTranspose(filters=1,
                                 kernel_size=kernel_size[block],
-                                padding="valid")(g)
+                                padding="same",
+                                strides=pool_size[block])(g)
+            # g = Dropout(rate=DROPOUT_RATE)(g)
 
-            g = UpSampling2D(size=pool_size[block])(g)
+        # g = Conv2DTranspose(filters=1,
+        #                     kernel_size=1,
+        #                     padding="valid")(g)
 
-        g = Conv2DTranspose(filters=1,
-                            kernel_size=1,
-                            padding="valid")(g)
-
-        g = Reshape(target_shape=IMG_SIZE)(g)
         out = Activation('tanh')(g)
 
         model = Model(inputs=inp, outputs=out)
-        print("SUMMARY GENERATOR: ")
+
         model.summary()
 
         return model
@@ -152,50 +142,55 @@ class GAN():
 
         d_in = Input(shape=IMG_SIZE)
 
-        # n_filt = [64, 12]
-        # kernel_size = [3, 3]
-        # pooling_size = [1, 2]
+        d = Conv2D(filters=8,
+                   kernel_size=4,
+                   padding='valid',
+                   strides=1)(d_in)
 
-        d = Conv2D(filters=64,
-                   kernel_size=11,
-                   padding='same')(d_in)
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        r1 = MaxPooling2D(pool_size=3)(d)
 
-        d = MaxPooling2D(pool_size=2)(d)
+        d = Conv2D(filters=16,
+                   kernel_size=8,
+                   padding='valid',
+                   strides=2)(d)
 
-        d = Conv2D(filters=64,
-                   kernel_size=5,
-                   padding='valid')(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        r2 = MaxPooling2D(pool_size=3)(d)
 
-        d = MaxPooling2D(pool_size=2)(d)
+        d = Conv2D(filters=16,
+                   kernel_size=8,
+                   padding='valid',
+                   strides=2)(d)
+        r3 = MaxPooling2D(pool_size=3)(d)
+
+        d = Conv2D(filters=48,
+                   kernel_size=8,
+                   padding='valid',
+                   strides=2)(d)
+
+        r4 = MaxPooling2D(pool_size=3)(d)
 
         d = Conv2D(filters=128,
-                   kernel_size=5,
-                   padding='valid')(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
-
-        d = MaxPooling2D(pool_size=2)(d)
-
-        d = Conv2D(filters=64,
-                   kernel_size=5,
-                   padding='valid')(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+                   kernel_size=8,
+                   padding='valid',
+                   strides=2)(d)
 
         d = Flatten()(d)
+        d = concatenate([d,
+                         Flatten()(r1),
+                         Flatten()(r2),
+                         Flatten()(r3),
+                         Flatten()(r4)])
 
-        d = Dense(units=128)(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = Dense(units=196)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = Dense(units=128)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
 
         d = Dense(units=1, activation='sigmoid')(d)
 
         d = Model(inputs=d_in, outputs=d)
-        print("SUMMARY DISCRIMINATOR: ")
         d.summary()
 
         return d
@@ -215,7 +210,7 @@ class GAN():
 
             batch_size = min(self.img_per_npy, batch_size)
 
-            
+
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
                                         np.random.choice(os.listdir(OUTPATH)))
@@ -228,24 +223,23 @@ class GAN():
             noise = np.random.normal(-1, 1, ((batch_size,) + LATENT_SIZE))
 
             # Adversarial ground truths
-            if np.random.rand() < P_FLIP_LABEL:
-                fake = np.ones((batch_size,))
-                if ADD_LABEL_NOISE:
-                    fake -= np.random.uniform(high=LABEL_NOISE,
-                                              size=(batch_size,))
-                valid = np.zeros((batch_size,))
-                if ADD_LABEL_NOISE:
-                    valid += np.random.uniform(high=LABEL_NOISE,
-                                               size=(batch_size,))
-            else:
-                valid = np.ones((batch_size,))
-                if ADD_LABEL_NOISE:
-                    valid -= np.random.uniform(high=LABEL_NOISE,
-                                               size=(batch_size,))
-                fake = np.zeros((batch_size,))
-                if ADD_LABEL_NOISE:
-                    fake += np.random.uniform(high=LABEL_NOISE,
-                                              size=(batch_size,))
+
+            valid = np.ones((batch_size,))
+            if ADD_LABEL_NOISE:
+                valid -= np.random.uniform(high=LABEL_NOISE,
+                                           size=(batch_size,))
+            for img in range(batch_size):
+                if np.random.rand() < P_FLIP_LABEL:
+                    valid[img] = 1 - valid[img]
+
+            fake = np.zeros((batch_size,))
+            if ADD_LABEL_NOISE:
+                fake += np.random.uniform(high=LABEL_NOISE,
+                                          size=(batch_size,))
+                print(fake)
+            for img in range(batch_size):
+                if np.random.rand() < P_FLIP_LABEL:
+                    fake[img] = 1 - fake[img]
 
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
@@ -270,7 +264,7 @@ class GAN():
             # ---------------------
             noise = np.random.normal(-1, 1, ((batch_size,) + LATENT_SIZE))
 
-            if epoch == 0 or accuracy > 52:
+            if epoch == 0 or accuracy > 67:
                 # Train the generator (to have the discriminator label samples
                 # as valid)
                 g_loss = self.combined.train_on_batch(noise, valid)
@@ -333,7 +327,6 @@ if __name__ == '__main__':
 
         if TRAIN_ON_COMPLEX:
             files_complex = aug.loadAllFiles(COMPLEXPATH)
-
 
         if TRAIN_ON_ROBIN:
             print(f"Preparing the ROBIN files...")
