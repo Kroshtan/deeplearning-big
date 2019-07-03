@@ -19,7 +19,7 @@ COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 # RESIZE_FACTOR = 24
-IMG_SIZE = (128, 96, 1)
+IMG_SIZE = (96, 128, 1)
 LATENT_SIZE = (16, 16)
 ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
 TRAIN_ON_ROBIN = True
@@ -31,7 +31,7 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 8
-SAVE_N_AUG_IMAGES_PER_NPY = 4 # Times 8, since every image will result in 8 augmented images. 
+SAVE_N_AUG_IMAGES_PER_NPY = 1 # Times 8, since every image will result in 8 augmented images. 
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
@@ -192,7 +192,7 @@ class GAN():
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
-        d = Dense(units=1)(d)
+        d = Dense(units=1, activation='sigmoid')(d)
 
         d = Model(inputs=d_in, outputs=d)
         print("SUMMARY DISCRIMINATOR: ")
@@ -340,7 +340,7 @@ if __name__ == '__main__':
             aug.augment_images(images=files_robin,
                                outpath=OUTPATH,
                                filename='robin_data',
-                               img_size=IMG_SIZE[:2],
+                               img_size=(IMG_SIZE[1], IMG_SIZE[0]),
                                saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
         if TRAIN_ON_COMPLEX:
@@ -348,7 +348,7 @@ if __name__ == '__main__':
             aug.augment_images(images=files_complex,
                                outpath=OUTPATH,
                                filename='complex_data',
-                               img_size=IMG_SIZE[:2],
+                               img_size=(IMG_SIZE[1], IMG_SIZE[0]),
                                saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
     # Train the GAN
