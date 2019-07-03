@@ -19,7 +19,7 @@ COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 # RESIZE_FACTOR = 24
-IMG_SIZE = (256, 256, 1)
+IMG_SIZE = (128, 96, 1)
 LATENT_SIZE = (16, 16)
 ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
 TRAIN_ON_ROBIN = True
@@ -31,6 +31,7 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 8
+SAVE_N_AUG_IMAGES_PER_NPY = 4 # Times 8, since every image will result in 8 augmented images. 
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
@@ -339,7 +340,7 @@ if __name__ == '__main__':
                                outpath=OUTPATH,
                                filename='robin_data',
                                img_size=IMG_SIZE[:2],
-                               saveiter=BATCH_SIZE)
+                               saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
         if TRAIN_ON_COMPLEX:
             print(f"Preparing the COMPLEX files...")
@@ -347,7 +348,7 @@ if __name__ == '__main__':
                                outpath=OUTPATH,
                                filename='complex_data',
                                img_size=IMG_SIZE[:2],
-                               saveiter=BATCH_SIZE)
+                               saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
     # Train the GAN
     gan = GAN()
