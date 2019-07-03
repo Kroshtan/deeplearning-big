@@ -14,8 +14,8 @@ from os import mkdir
 from os.path import isdir, abspath
 from keras.utils import plot_model
 
-ROBINPATH = abspath("../ROBIN")
-COMPLEXPATH = abspath("../Dataset_complex")
+ROBINPATH = abspath("./ROBIN")
+COMPLEXPATH = abspath("./Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 # RESIZE_FACTOR = 24
@@ -33,21 +33,19 @@ EPOCHS = 1000000
 BATCH_SIZE = 16
 # Times 8, since every image will result in 8 augmented images.
 SAVE_N_AUG_IMAGES_PER_NPY = 4
-LEARNING_RATE = 1e-4
-DECAY = 1e-8
+LEARNING_RATE = 1e-6
+DECAY = 1e-7
 P_FLIP_LABEL = 0.05
 LRELU_FACTOR = 0.2
 ADD_LABEL_NOISE = False
 LABEL_NOISE = 0.01
 DROPOUT_RATE = 0.1
-SAMPLE_INTERVAL = 100
+SAMPLE_INTERVAL = 20
 SAVE_INTERVAL = 2500
 
 
 class GAN():
     def __init__(self):
-        self.img_per_npy = SAVE_N_AUG_IMAGES_PER_NPY*8
-
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
         # Empty any old log directory
@@ -107,10 +105,9 @@ class GAN():
         inp = Input(shape=LATENT_SIZE)
         inp_resh = Reshape(LATENT_SIZE + (1,))(inp)
 
-        n_filt = [128, 128, 128]
-        kernel_size = [4, 2, 4]
-        pool_size_down = [1, 1, 1]
-        pool_size_up = [4, 2, 1]
+        n_filt = [512, 512, 512, 512]
+        kernel_size = [6, 6, 8, 14]
+        pool_size_up = [2, 2, 2, 1]
 
         """
         Conv on latent for global building shape, then upsample x4
@@ -134,9 +131,9 @@ class GAN():
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
                        padding="same",
-                       strides=pool_size_down[block])(g)
+                       strides=1)(g)
 
-            g = Dropout(rate=DROPOUT_RATE)(g)
+            # g = Dropout(rate=DROPOUT_RATE)(g)
 
             g = Conv2DTranspose(filters=1,
                                 kernel_size=kernel_size[block],
@@ -156,22 +153,28 @@ class GAN():
         d_in = Input(shape=IMG_SIZE)
 
         # Scale 128x128 for finding lines and corners
-        d = Conv2D(filters=16,
+        d = Conv2D(filters=32,
                    kernel_size=6,
                    padding='valid',
-                   strides=2)(d_in)
+                   strides=1)(d_in)
+        r0 = MaxPooling2D(pool_size=3)(d)
+
+        d = Conv2D(filters=64,
+                   kernel_size=6,
+                   padding='valid',
+                   strides=2)(d)
 
         r1 = MaxPooling2D(pool_size=3)(d)
 
         # Scale 64x64 for preventing parallel lines and finding objects
-        d = Conv2D(filters=16,
+        d = Conv2D(filters=64,
                    kernel_size=8,
                    padding='valid',
                    strides=2)(d)
         r2 = MaxPooling2D(pool_size=3)(d)
 
         # Scale 32x32 for shaping rooms
-        d = Conv2D(filters=48,
+        d = Conv2D(filters=64,
                    kernel_size=8,
                    padding='valid',
                    strides=2)(d)
@@ -179,26 +182,27 @@ class GAN():
         r3 = MaxPooling2D(pool_size=3)(d)
 
         # Scale 16x16 for shaping buildings
-        d = Conv2D(filters=128,
+        d = Conv2D(filters=64,
                    kernel_size=8,
                    padding='valid',
                    strides=2)(d)
 
         d = Flatten()(d)
         d = concatenate([d,
+                         Flatten()(r0),
                          Flatten()(r1),
                          Flatten()(r2),
                          Flatten()(r3)])
 
-        d = Dense(units=196)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
         d = Dense(units=128)(d)
+        # d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        route = d
+        d = Dense(units=64)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
-        d = Dense(units=32)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
+
+        d = concatenate([d, route])
 
         d = Dense(units=1, activation='sigmoid')(d)
 
@@ -220,7 +224,7 @@ class GAN():
             # ---------------------
 
             # Detect batch size in npys
-            batch_size = min(self.img_per_npy, batch_size)
+            batch_size = min(SAVE_N_AUG_IMAGES_PER_NPY*8, batch_size)
 
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
@@ -255,7 +259,7 @@ class GAN():
             # Generate a batch of new images
             gen_imgs = self.generator.predict(noise)
 
-            if epoch == 0 or accuracy < 80:
+            if epoch == 0 or accuracy < 90:
                 # Train the discriminator
                 d_loss_real = self.discriminator.train_on_batch(self.X_train,
                                                                 valid)
@@ -275,7 +279,7 @@ class GAN():
             # ---------------------
             noise = np.random.normal(-1, 1, ((batch_size,) + LATENT_SIZE))
 
-            if epoch == 0 or accuracy > 67:
+            if epoch == 0 or accuracy > 75:
                 # Train the generator (to have the discriminator label samples
                 # as valid)
                 g_loss = self.combined.train_on_batch(noise, valid)
