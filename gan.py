@@ -44,9 +44,10 @@ SAMPLE_INTERVAL = 50
 
 class GAN():
     def __init__(self):
-        self.img_per_npy = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-        self.img_per_npy = np.load(self.img_per_npy, allow_pickle=True)
-        self.img_per_npy = self.img_per_npy.shape[0]
+        # self.img_per_npy = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
+        # self.img_per_npy = np.load(self.img_per_npy, allow_pickle=True)
+        # self.img_per_npy = self.img_per_npy.shape[0]
+        self.img_per_npy = SAVE_N_AUG_IMAGES_PER_NPY*8
 
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
@@ -214,12 +215,12 @@ class GAN():
 
             batch_size = min(self.img_per_npy, batch_size)
 
-            idx = np.random.randint(0, self.img_per_npy-1, batch_size)
-
+            
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
                                         np.random.choice(os.listdir(OUTPATH)))
             self.X_train = np.load(self.X_train, allow_pickle=True)
+            idx = np.random.randint(0, len(self.X_train), batch_size)
             self.X_train = self.X_train[idx]
             self.X_train = np.expand_dims(self.X_train, axis=3)
             self.X_train = self.X_train / (-255/2) + 1
