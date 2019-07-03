@@ -12,9 +12,10 @@ import shutil
 import numpy as np
 from os import mkdir
 from os.path import isdir, abspath
+from keras.utils import plot_model
 
-ROBINPATH = abspath("./ROBIN")
-COMPLEXPATH = abspath("./Dataset_complex")
+ROBINPATH = abspath("../ROBIN")
+COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 RESIZE_FACTOR = 26
@@ -26,7 +27,7 @@ IMAGE_DIR = 'images/'
 LOG_DIR = './logs'
 
 EPOCHS = 1000000
-BATCH_SIZE = 1
+BATCH_SIZE = 8
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
@@ -104,11 +105,17 @@ class GAN():
         # Trains the generator to fool the discriminator
         self.combined = Model(z, validity)
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
+        print("Saving model layout image...")
+        #plot_model(self.generator, to_file='generator_model.png', show_shapes=True, show_layer_names=False)
+        #plot_model(self.discriminator, to_file='discriminator_model.png', show_shapes=True, show_layer_names=False)
+        #plot_model(self.combined, to_file='combined_model.png', show_shapes=True, show_layer_names=False)
 
     def build_generator(self):
 
         inp = Input(shape=self.latent_dim)
+
         inp_resh = Reshape(self.latent_dim + (1,))(inp)
+        print(inp_resh.shape)
 
         n_filt = [32, 32, 32, 16]
         kernel_size = [3, 5, 5, 5]
@@ -142,7 +149,7 @@ class GAN():
         out = Activation('tanh')(g)
 
         model = Model(inputs=inp, outputs=out)
-
+        print("SUMMARY GENERATOR: ")
         model.summary()
 
         return model
@@ -155,7 +162,7 @@ class GAN():
         # kernel_size = [3, 3]
         # pooling_size = [1, 2]
 
-        d = Conv2D(filters=8,
+        d = Conv2D(filters=64,
                    kernel_size=11,
                    padding='same')(d_in)
         d = Dropout(rate=DROPOUT_RATE)(d)
@@ -163,14 +170,6 @@ class GAN():
 
         d = MaxPooling2D(pool_size=4)(d)
 
-        d = Conv2D(filters=16,
-                   kernel_size=5,
-                   padding='same')(d)
-        d = Dropout(rate=DROPOUT_RATE)(d)
-        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
-
-        d = MaxPooling2D(pool_size=2)(d)
-
         d = Conv2D(filters=32,
                    kernel_size=5,
                    padding='same')(d)
@@ -180,6 +179,14 @@ class GAN():
         d = MaxPooling2D(pool_size=2)(d)
 
         d = Conv2D(filters=32,
+                   kernel_size=5,
+                   padding='same')(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+
+        d = MaxPooling2D(pool_size=2)(d)
+
+        d = Conv2D(filters=64,
                    kernel_size=5,
                    padding='same')(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
@@ -187,13 +194,14 @@ class GAN():
 
         d = Flatten()(d)
 
-        d = Dense(units=64)(d)
+        d = Dense(units=128)(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
 
         d = Dense(units=1)(d)
 
         d = Model(inputs=d_in, outputs=d)
+        print("SUMMARY DISCRIMINATOR: ")
         d.summary()
 
         return d
