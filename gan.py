@@ -12,9 +12,10 @@ import shutil
 import numpy as np
 from os import mkdir
 from os.path import isdir, abspath
+from keras.utils import plot_model
 
-ROBINPATH = abspath("./ROBIN")
-COMPLEXPATH = abspath("./Dataset_complex")
+ROBINPATH = abspath("../ROBIN")
+COMPLEXPATH = abspath("../Dataset_complex")
 OUTPATH = abspath("./augmented")
 
 # RESIZE_FACTOR = 24
@@ -30,6 +31,7 @@ LOG_DIR = './logs'
 
 EPOCHS = 1000000
 BATCH_SIZE = 16
+SAVE_N_AUG_IMAGES_PER_NPY = 4  # Times 8, since every image will result in 8 augmented images.
 LEARNING_RATE = 1e-5
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
@@ -42,9 +44,7 @@ SAMPLE_INTERVAL = 20
 
 class GAN():
     def __init__(self):
-        self.img_per_npy = os.path.join(OUTPATH, os.listdir(OUTPATH)[0])
-        self.img_per_npy = np.load(self.img_per_npy, allow_pickle=True)
-        self.img_per_npy = self.img_per_npy.shape[0]
+        self.img_per_npy = SAVE_N_AUG_IMAGES_PER_NPY*8
 
         optimizer = Adam(LEARNING_RATE, decay=DECAY)
 
@@ -98,6 +98,7 @@ class GAN():
         # Trains the generator to fool the discriminator
         self.combined = Model(z, validity)
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
+        print("Saving model layout image...")
 
     def build_generator(self):
 
@@ -209,12 +210,12 @@ class GAN():
 
             batch_size = min(self.img_per_npy, batch_size)
 
-            idx = np.random.randint(0, self.img_per_npy-1, batch_size)
 
             # Select a random batch of images
             self.X_train = os.path.join(OUTPATH,
                                         np.random.choice(os.listdir(OUTPATH)))
             self.X_train = np.load(self.X_train, allow_pickle=True)
+            idx = np.random.randint(0, len(self.X_train), batch_size)
             self.X_train = self.X_train[idx]
             self.X_train = np.expand_dims(self.X_train, axis=3)
             self.X_train = self.X_train / (-255/2) + 1
@@ -327,14 +328,13 @@ if __name__ == '__main__':
         if TRAIN_ON_COMPLEX:
             files_complex = aug.loadAllFiles(COMPLEXPATH)
 
-
         if TRAIN_ON_ROBIN:
             print(f"Preparing the ROBIN files...")
             aug.augment_images(images=files_robin,
                                outpath=OUTPATH,
                                filename='robin_data',
                                img_size=IMG_SIZE[:2],
-                               saveiter=BATCH_SIZE)
+                               saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
         if TRAIN_ON_COMPLEX:
             print(f"Preparing the COMPLEX files...")
@@ -342,7 +342,7 @@ if __name__ == '__main__':
                                outpath=OUTPATH,
                                filename='complex_data',
                                img_size=IMG_SIZE[:2],
-                               saveiter=BATCH_SIZE)
+                               saveiter=SAVE_N_AUG_IMAGES_PER_NPY)
 
     # Train the GAN
     gan = GAN()
