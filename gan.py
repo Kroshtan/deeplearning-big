@@ -21,7 +21,7 @@ OUTPATH = abspath("./augmented")
 # RESIZE_FACTOR = 24
 IMG_SIZE = (128, 128, 1)
 LATENT_SIZE = (16, 16)
-ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
+# ratio = (IMG_SIZE[0]//LATENT_SIZE[0], IMG_SIZE[1]//LATENT_SIZE[1])
 TRAIN_ON_ROBIN = True
 TRAIN_ON_COMPLEX = False
 
@@ -33,14 +33,15 @@ EPOCHS = 1000000
 BATCH_SIZE = 16
 # Times 8, since every image will result in 8 augmented images.
 SAVE_N_AUG_IMAGES_PER_NPY = 4
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 DECAY = 1e-8
 P_FLIP_LABEL = 0.05
 LRELU_FACTOR = 0.2
 ADD_LABEL_NOISE = False
 LABEL_NOISE = 0.01
 DROPOUT_RATE = 0.1
-SAMPLE_INTERVAL = 20
+SAMPLE_INTERVAL = 100
+SAVE_INTERVAL = 2500
 
 
 class GAN():
@@ -106,9 +107,24 @@ class GAN():
         inp = Input(shape=LATENT_SIZE)
         inp_resh = Reshape(LATENT_SIZE + (1,))(inp)
 
-        n_filt = [128, 64, 32, 8]
-        kernel_size = [8, 8, 8, 8]
-        pool_size = [ratio, 4, 2, 2]
+        n_filt = [128, 128, 128]
+        kernel_size = [4, 2, 4]
+        pool_size_down = [1, 1, 1]
+        pool_size_up = [4, 2, 1]
+
+        """
+        Conv on latent for global building shape, then upsample x4
+        Conv on result for room shape, then upsample x2
+
+
+        Remember:
+        * Pool_size_up = 1 for last layer to ensure detail at pixel level
+          and intact walls
+        * latent_dim multiplied by the product of pool_size_up should equal
+          img size
+        * Relation between kernel size and pool size affects checkerboard artifacts
+
+        """
 
         numlayers = len(n_filt)
 
@@ -118,12 +134,14 @@ class GAN():
             g = Conv2D(filters=n_filt[block],
                        kernel_size=kernel_size[block],
                        padding="same",
-                       strides=(1 if not block else pool_size[block]))(g)
+                       strides=pool_size_down[block])(g)
+
+            g = Dropout(rate=DROPOUT_RATE)(g)
 
             g = Conv2DTranspose(filters=1,
                                 kernel_size=kernel_size[block],
                                 padding="same",
-                                strides=pool_size[block])(g)
+                                strides=pool_size_up[block])(g)
 
         out = Activation('tanh')(g)
 
@@ -137,49 +155,48 @@ class GAN():
 
         d_in = Input(shape=IMG_SIZE)
 
-        d = Conv2D(filters=8,
-                   kernel_size=4,
-                   padding='same',
-                   strides=1)(d_in)
+        # Scale 128x128 for finding lines and corners
+        d = Conv2D(filters=16,
+                   kernel_size=6,
+                   padding='valid',
+                   strides=2)(d_in)
 
         r1 = MaxPooling2D(pool_size=3)(d)
 
+        # Scale 64x64 for preventing parallel lines and finding objects
         d = Conv2D(filters=16,
                    kernel_size=8,
-                   padding='same',
+                   padding='valid',
                    strides=2)(d)
-
         r2 = MaxPooling2D(pool_size=3)(d)
 
-        d = Conv2D(filters=16,
-                   kernel_size=8,
-                   padding='same',
-                   strides=2)(d)
-        r3 = MaxPooling2D(pool_size=3)(d)
-
+        # Scale 32x32 for shaping rooms
         d = Conv2D(filters=48,
                    kernel_size=8,
-                   padding='same',
+                   padding='valid',
                    strides=2)(d)
 
-        r4 = MaxPooling2D(pool_size=3)(d)
+        r3 = MaxPooling2D(pool_size=3)(d)
 
+        # Scale 16x16 for shaping buildings
         d = Conv2D(filters=128,
                    kernel_size=8,
-                   padding='same',
+                   padding='valid',
                    strides=2)(d)
 
         d = Flatten()(d)
         d = concatenate([d,
                          Flatten()(r1),
                          Flatten()(r2),
-                         Flatten()(r3),
-                         Flatten()(r4)])
+                         Flatten()(r3)])
 
         d = Dense(units=196)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
         d = Dense(units=128)(d)
+        d = LeakyReLU(alpha=LRELU_FACTOR)(d)
+        d = Dropout(rate=DROPOUT_RATE)(d)
+        d = Dense(units=32)(d)
         d = LeakyReLU(alpha=LRELU_FACTOR)(d)
         d = Dropout(rate=DROPOUT_RATE)(d)
 
@@ -190,7 +207,8 @@ class GAN():
 
         return d
 
-    def train(self, epochs, batch_size=BATCH_SIZE, sample_interval=50):
+    def train(self, epochs, batch_size=BATCH_SIZE, sample_interval=50,
+              save_interval=500):
 
         tensorboard = TensorBoard(log_dir=LOG_DIR)
         tensorboard.set_model(self.discriminator)
@@ -271,7 +289,7 @@ class GAN():
                                              'Accuracy': accuracy,
                                              'Comb. loss': g_loss + d_loss[0]})
 
-            # If at save interval => save generated image samples
+            # If at image save interval => save generated image samples
             if epoch % sample_interval == 0:
                 print(f"@ {epoch:{len(str(EPOCHS))}}:\t"
                       f"Accuracy: {int(accuracy):3}%\t"
@@ -279,6 +297,12 @@ class GAN():
                       f"D-Loss: {d_loss[0]:6.3f}\t"
                       f"Combined: {g_loss+d_loss[0]:6.3f}")
                 self.sample_images(epoch, accuracy, real_imgs=self.X_train)
+
+            # If at model save interval => save models
+            if epoch and epoch % save_interval == 0:
+                self.discriminator.save('discriminator.h5')
+                self.generator.save('generator.h5')
+                print(f"\n{'*'*40}\n\tModel saved!\n{'*'*40}\n")
 
         tensorboard.on_train_end(tensorboard)
         self.discriminator.save('discriminator.h5')
@@ -339,4 +363,6 @@ if __name__ == '__main__':
 
     # Train the GAN
     gan = GAN()
-    gan.train(epochs=EPOCHS, sample_interval=SAMPLE_INTERVAL)
+    gan.train(epochs=EPOCHS,
+              sample_interval=SAMPLE_INTERVAL,
+              save_interval=SAVE_INTERVAL)
