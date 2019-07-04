@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 #FILENAMES = ['complex_data_0.npy', 'complex_data_1.npy', 'complex_data_3.npy', 'complex_data_4.npy']
-FILENAMES = ['augmented/robin_data_1.npy']
+FILENAMES = ['augmented/robin_data_0.npy']
 #FILENAMES = ['complex_data_0.npy']
 WIDTH = HEIGHT = 500
 
@@ -16,5 +16,5 @@ def open_file(filename):
 		cv2.destroyAllWindows()
 
 for file in FILENAMES:
-	file = file
+	file = '../'+file
 	open_file(file)
