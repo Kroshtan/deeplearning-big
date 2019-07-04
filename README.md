@@ -1,4 +1,4 @@
-# deeplearning-big
+# Deep-learning project:
 GAN for building floorplans
 
 ## Run instructions
